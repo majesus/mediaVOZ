@@ -16,11 +16,12 @@ render=function(){
   if(!C.activo) return;
   const nodos=$("log").querySelectorAll(".entry");
   nodos.forEach((n,i)=>{ const e=entries[i]; if(!e||!n.classList.contains("you")||n.childNodes.length<2) return;
-    const t=n.childNodes[1]; if(t.nodeType!==3) return; n.replaceChild(C.nodo(e.text,i),t); });
+    const t=n.childNodes[1]; if(t.nodeType!==3) return; const cerrada=entries.slice(i+1).some(x=>x.role!=="Sistema"&&x.role!=="Herramienta"); n.replaceChild(C.nodo(e.text,i,cerrada),t); });
 };
 const row=document.querySelector(".exportrow"), lab=document.createElement("label");
-lab.className="kw-ctl"; lab.innerHTML='<input type="checkbox" id="kwChk" checked> Palabras clave en directo <small id="kwEst"></small>';
+lab.className="kw-ctl"; lab.innerHTML='<input type="checkbox" id="kwChk" checked> Palabras clave en directo <select id="kwMod" aria-label="Modelo de las palabras clave"><option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (el más barato)</option><option value="gemini-2.5-flash">gemini-2.5-flash</option><option value="gemini-flash-latest">gemini-flash-latest</option><option value="gemini-2.0-flash">gemini-2.0-flash</option></select> <small id="kwEst"></small>';
 (row||$("log").parentNode).appendChild(lab);
+$("kwMod").onchange=e=>{C.modelo=e.target.value;C.bloqueo=0};
 $("kwChk").onchange=e=>{C.activo=e.target.checked;render()};
 render();
 })();

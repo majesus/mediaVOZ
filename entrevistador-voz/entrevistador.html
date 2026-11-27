@@ -94,7 +94,7 @@
     <p class="small" style="margin:.25rem 0 .4rem">Describa su negocio y la conversación que desea automatizar. Gemini propondrá todos los campos; usted los revisa y los edita. Se usa la clave del campo «Clave API de Gemini» y el texto se envía a Google.</p>
     <label for="descNeg">Descripción del negocio y de la conversación</label>
     <textarea id="descNeg" rows="4" placeholder="Ej.: Tenemos una clínica dental con tres gabinetes. Queremos que un asistente atienda llamadas de pacientes que preguntan por tratamientos, precios orientativos y citas."></textarea>
-    <div class="fila2"><div><label for="mTexto">Modelo de texto</label><select id="mTexto"><option value="gemini-flash-latest">gemini-flash-latest</option><option value="gemini-2.5-flash">gemini-2.5-flash</option><option value="gemini-2.5-pro">gemini-2.5-pro</option><option value="gemini-2.0-flash">gemini-2.0-flash</option></select></div><button type="button" id="genCfg">Generar configuración</button></div>
+    <div class="fila2"><div><label for="mTexto">Modelo de texto</label><select id="mTexto"><option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option><option value="gemini-2.5-flash" selected>gemini-2.5-flash</option><option value="gemini-flash-latest">gemini-flash-latest</option><option value="gemini-2.0-flash">gemini-2.0-flash</option></select></div><button type="button" id="genCfg">Generar configuración</button></div>
     <p id="msgAsist" role="status" aria-live="polite"></p>
   </div>
   <label for="caso">Caso de uso</label>
@@ -382,12 +382,12 @@ function crea(o){
       catch(e){ const dia=/per ?day|PerDay|daily/i.test(e.message); M.bloqueo=Date.now()+(dia?1800000:15000);
         est(dia?"Cupo diario de Gemini agotado: las palabras clave se pausan 30 min (el resto sigue funcionando).":"Error: "+e.message+" Se reintentará en 15 s."); }
       finally{ enCurso.delete(texto); }
-    },1000);
+    },300);
     timers.set(id,{texto,h});
   }
-  M.nodo=(texto,id)=>{
+  M.nodo=(texto,id,cerrada)=>{
     const t=String(texto), f=document.createElement("span"), ms=M.activo?cache.get(t):null;
-    if(M.activo&&!ms) pide(t,id);
+    if(M.activo&&!ms&&cerrada!==false) pide(t,id);
     if(!ms||!ms.length){ f.append(t); return f; }
     let p=0;
     for(const m of ms){
@@ -568,7 +568,7 @@ $("csv").onclick=()=>descarga("transcripcion.csv",csvTranscripcion(),"text/csv;c
 
 const CLV=Claves.crea({obtenClave:()=>($("clave").value||$("claveInf").value).trim(),obtenModelo:()=>$("mTexto").value.trim(),
   obtenContexto:()=>"ROL: "+$("rol").value+"\nOBJETIVO: "+$("objetivo").value+($("guia").value.trim()?"\nPREGUNTAS GUÍA:\n"+$("guia").value:""),alCambiar:()=>pintaLog(),alEstado:m=>{const x=$("kwEst");if(x)x.textContent=m}});
-{ const l=document.createElement("label"); l.className="kw-ctl"; l.innerHTML='<input type="checkbox" id="kwChk" checked> Palabras clave en directo <small>(usa la clave de Gemini)</small> <small id="kwEst"></small>'; $("log").before(l); $("kwChk").onchange=e=>{CLV.activo=e.target.checked;pintaLog()}; }
+{ const l=document.createElement("label"); l.className="kw-ctl"; l.innerHTML='<input type="checkbox" id="kwChk" checked> Palabras clave en directo <small></small> <select id="kwMod" aria-label="Modelo de las palabras clave"><option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (el más barato)</option><option value="gemini-2.5-flash">gemini-2.5-flash</option><option value="gemini-flash-latest">gemini-flash-latest</option><option value="gemini-2.0-flash">gemini-2.0-flash</option></select> <small id="kwEst"></small>'; $("log").before(l); $("kwMod").onchange=e=>{CLV.modelo=e.target.value;CLV.bloqueo=0}; $("kwChk").onchange=e=>{CLV.activo=e.target.checked;pintaLog()}; }
 let ultimoInforme=null;
 const TXT_TRANS = () => trozos.map(x=>"["+mmss(x.t)+"] "+(x.quien==="IA"?"Asistente":"Persona")+": "+x.texto.trim()).join("\n");
 $("genInf").onclick = async () => {
@@ -665,7 +665,7 @@ async function token(clave, min){
 }
 function pintaLog(){
   $("log").textContent = "";
-  for(const x of trozos){ const d=document.createElement("p"); d.className="t "+(x.quien==="IA"?"ia":""); const b=document.createElement("b"); b.textContent=(x.quien==="IA"?"Asistente":"Persona")+" · "+mmss(x.t); d.append(b,x.quien==="IA"?x.texto:CLV.nodo(x.texto,"t"+trozos.indexOf(x))); $("log").append(d); }
+  for(const x of trozos){ const d=document.createElement("p"); d.className="t "+(x.quien==="IA"?"ia":""); const b=document.createElement("b"); b.textContent=(x.quien==="IA"?"Asistente":"Persona")+" · "+mmss(x.t); d.append(b,x.quien==="IA"?x.texto:CLV.nodo(x.texto,"t"+trozos.indexOf(x),trozos.indexOf(x)<trozos.length-1)); $("log").append(d); }
 }
 function anota(quien, texto){
   const u = trozos[trozos.length-1];

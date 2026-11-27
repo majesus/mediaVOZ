@@ -11,7 +11,7 @@ document.head.appendChild(st);
 const dlg=document.createElement("dialog");dlg.id="reportDialog";
 dlg.innerHTML='<form method="dialog"><div class="panelhead"><h2>Informe de la conversación</h2><button value="close" class="quiet">Cerrar ×</button></div></form>'+
  '<small>Un modelo de texto de Gemini redacta un resumen con hallazgos, citas, datos y alertas a partir de la conversación. Al generarlo, la transcripción se envía a Google con la clave de Configuración. Es un borrador: revíselo antes de usarlo.</small>'+
- '<label for="repModel">Modelo de texto</label><select id="repModel"><option value="gemini-flash-latest">gemini-flash-latest</option><option value="gemini-2.5-flash">gemini-2.5-flash</option><option value="gemini-2.5-pro">gemini-2.5-pro</option><option value="gemini-2.0-flash">gemini-2.0-flash</option></select>'+
+ '<label for="repModel">Modelo de texto</label><select id="repModel"><option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option><option value="gemini-2.5-flash" selected>gemini-2.5-flash</option><option value="gemini-flash-latest">gemini-flash-latest</option><option value="gemini-2.0-flash">gemini-2.0-flash</option></select>'+
  '<div class="actions"><button type="button" id="repGen" class="primary">Generar informe</button><button type="button" id="repMd" disabled>↓ Descargar .md</button><button type="button" id="repHtml" disabled>↓ Descargar .html</button></div>'+
  '<p id="repMsg" role="status" aria-live="polite"></p><div id="repPrev" hidden></div>';
 document.body.appendChild(dlg);

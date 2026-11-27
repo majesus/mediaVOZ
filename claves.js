@@ -49,12 +49,12 @@ function crea(o){
       catch(e){ const dia=/per ?day|PerDay|daily/i.test(e.message); M.bloqueo=Date.now()+(dia?1800000:15000);
         est(dia?"Cupo diario de Gemini agotado: las palabras clave se pausan 30 min (el resto sigue funcionando).":"Error: "+e.message+" Se reintentará en 15 s."); }
       finally{ enCurso.delete(texto); }
-    },1000);
+    },300);
     timers.set(id,{texto,h});
   }
-  M.nodo=(texto,id)=>{
+  M.nodo=(texto,id,cerrada)=>{
     const t=String(texto), f=document.createElement("span"), ms=M.activo?cache.get(t):null;
-    if(M.activo&&!ms) pide(t,id);
+    if(M.activo&&!ms&&cerrada!==false) pide(t,id);
     if(!ms||!ms.length){ f.append(t); return f; }
     let p=0;
     for(const m of ms){
