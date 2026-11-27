@@ -71,7 +71,7 @@
   <p id="resumen"></p>
   <label for="clave">Clave API de Gemini <small>(solo se usa en esta pestaña; no se guarda)</small></label>
   <input id="clave" type="password" autocomplete="off" placeholder="AIza…">
-  <div class="acciones"><button id="ini">Iniciar entrevista</button><button class="sec" id="fin" disabled>Finalizar</button><button class="sec" id="desc" disabled>Descargar transcripción</button><button class="sec" id="csv" disabled>Descargar CSV</button><button class="sec" id="demo" type="button" title="Carga una conversación escrita a mano para probar el informe sin micrófono">Conversación de ejemplo</button></div>
+  <div class="acciones"><button id="ini">Iniciar entrevista</button><button class="sec" id="fin" disabled>Finalizar</button><button class="sec" id="desc" disabled>Descargar transcripción</button><button class="sec" id="csv" disabled>Descargar CSV</button><button class="sec" id="irInf" disabled>Informe ↓</button><button class="sec" id="demo" type="button" title="Carga una conversación escrita a mano para probar el informe sin micrófono">Conversación de ejemplo</button></div>
   <p id="estado" style="margin-top:1rem"><i id="punto"></i><span id="txtEstado">En espera.</span><span id="reloj" style="margin-left:auto">00:00</span></p>
   <div id="log"><p class="vacio">Aquí aparecerá la conversación.</p></div>
   <div id="falt" class="small"></div>
@@ -302,6 +302,7 @@ function csvTranscripcion(){
   const f=["tiempo;hablante;texto"].concat(trozos.map(x=>[mmss(x.t),x.quien==="IA"?"Asistente":"Persona",csvCelda(x.texto.trim())].join(";")));
   return "\ufeff"+f.join("\r\n")+"\r\n";
 }
+$("irInf").onclick=()=>{ const i=$("informe"); i.hidden=false; i.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth",block:"start"}); $("claveInf").focus({preventScroll:true}); };
 $("csv").onclick=()=>descarga("transcripcion.csv",csvTranscripcion(),"text/csv;charset=utf-8");
 
 let ultimoInforme=null;
@@ -407,7 +408,7 @@ function anota(quien, texto){
       const clave="d"+i+"_"+k; if(registrados.has(clave) || !nt.includes(norm(fr))) return; registrados.add(clave);
       const j=trozos.slice(0,i).map(x=>x.quien).lastIndexOf("Tú");
       dudReg.push({t:j>=0?trozos[j].t:trozos[i].t, et:(et||"Dudosa").trim(), r:j>=0?trozos[j].texto.trim():"(sin respuesta previa)"}); pintaFaltas(); }); }
-  $("log").scrollTop = $("log").scrollHeight; $("desc").disabled = false; $("csv").disabled = false; $("informe").hidden = false;
+  $("log").scrollTop = $("log").scrollHeight; $("desc").disabled = false; $("csv").disabled = false; $("irInf").disabled = false; $("informe").hidden = false;
 }
 function pintaFaltas(){
   const el=$("falt"); el.textContent="";
@@ -471,7 +472,7 @@ function parar(msg){
   if(ws){ ws.onclose=null; try{ws.close()}catch{} }
   stream&&stream.getTracks().forEach(t=>t.stop());
   ctxIn&&ctxIn.close().catch(()=>{}); ctxOut&&ctxOut.close().catch(()=>{});
-  $("ini").disabled=false; $("fin").disabled=true; estado(msg||"En espera.");
+  $("ini").disabled=false; $("fin").disabled=true; estado((msg||"En espera.")+(trozos.length?" Informe y CSV disponibles con el botón «Informe ↓».":""));
 }
 $("ini").onclick=iniciar; $("fin").onclick=()=>parar("Entrevista finalizada.");
 $("desc").onclick=()=>descarga("transcripcion.txt",(ordenAsignado ? "Orden asignado: "+ordenAsignado.join(" → ")+"\n\n" : "")+trozos.map(x=>"["+mmss(x.t)+"] "+(x.quien==="IA"?"Asistente":"Persona")+": "+x.texto).join("\n\n")+"\n"+($("faltas").value.trim() ? "\nDATOS QUE LA PERSONA ECHÓ EN FALTA (detección automática; revisar):\n"+(faltasReg.length ? faltasReg.map(t=>"- "+t).join("\n") : "- ninguno detectado")+"\n" : "")+($("dudosas").value.trim() ? "\nRESPUESTAS DUDOSAS O INCOHERENTES (detección automática; el investigador decide su exclusión):\n"+(dudReg.length ? dudReg.map(x=>"- ["+mmss(x.t)+"] "+x.et+": "+x.r).join("\n") : "- ninguna detectada")+"\n" : ""),"text/plain;charset=utf-8");
