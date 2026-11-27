@@ -336,11 +336,11 @@ root.InformeSwiss={construyeMd,construyeHtml,descarga,pideInforme,llamaTexto,slu
 (function(root){
 "use strict";
 const CSS=".kw{color:#14110F;padding:3px 0;border-radius:8px;-webkit-box-decoration-break:clone;box-decoration-break:clone;padding-left:5px;padding-right:5px;font-weight:400}"+
-".kw-foco{background:#FFEA00}.kw-dato{background:#6BFF3B}"+
+".kw{background:#FFEA00}"+
 ".kw-bd{display:inline-block;font:500 10px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:2px 4px;margin:0 6px 0 2px;vertical-align:super;color:#14110F;letter-spacing:.02em;border-radius:4px;text-transform:uppercase}"+
-".kw-foco.kw-bd{background:#FFEA00}.kw-dato.kw-bd{background:#6BFF3B}"+
 ".kw-ctl{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;margin:0 0 .5rem}.kw-ctl input{width:16px;height:16px}.kw-ctl small{opacity:.7}";
-const SCHEMA={type:"OBJECT",required:["claves"],properties:{claves:{type:"ARRAY",items:{type:"OBJECT",required:["frase","codigo","tipo"],properties:{frase:{type:"STRING"},codigo:{type:"STRING"},tipo:{type:"STRING",enum:["foco","dato"]}}}}}};
+const COD={PRE:["Precio","#FFE066"],CONF:["Confianza","#8FD3FF"],CANT:["Cantidad","#FFB38A"],PROD:["Producto","#B7F55C"],PLAZ:["Plazo o tiempo","#C9B6FF"],MARC:["Marca","#FF9EC4"],CALI:["Calidad","#7EE6C8"],NEC:["Necesidad","#FFC857"],OBJ:["Objeción o duda","#FF8A80"],EMO:["Emoción","#E3A8FF"],DISP:["Disponibilidad","#9FB8FF"],PAGO:["Pago o financiación","#E6D3A3"],USO:["Uso o contexto","#A5E8A0"],OTRO:["Otro","#D9D9D9"]};
+const SCHEMA={type:"OBJECT",required:["claves"],properties:{claves:{type:"ARRAY",items:{type:"OBJECT",required:["frase","codigo","tipo"],properties:{frase:{type:"STRING"},codigo:{type:"STRING",enum:Object.keys(COD)},tipo:{type:"STRING",enum:["foco","dato"]}}}}}};
 function crea(o){
   const I=root.InformeSwiss;
   if(!document.getElementById("kw-css")){const s=document.createElement("style");s.id="kw-css";s.textContent=CSS;document.head.appendChild(s)}
@@ -354,7 +354,7 @@ function crea(o){
       const i=L.indexOf(lim(f)); if(i<0) continue;
       const s=i,e=i+f.length; if(vistos.some(v=>s<v[1]&&e>v[0])) continue;
       vistos.push([s,e]);
-      out.push({s,e,tipo:c.tipo==="dato"?"dato":"foco",codigo:String(c.codigo||"").replace(/[^\p{L}\p{N}·.\-]/gu,"").slice(0,6).toUpperCase()||"CLAVE"});
+      out.push({s,e,tipo:c.tipo==="dato"?"dato":"foco",codigo:COD[String(c.codigo||"").toUpperCase()]?String(c.codigo).toUpperCase():"OTRO"});
     }
     return out.sort((a,b)=>a.s-b.s).slice(0,3);
   }
@@ -364,7 +364,7 @@ function crea(o){
      "MOTIVO DE LA EXPERIENCIA:\n"+o.obtenContexto()+"\n\n"+
      "Devuelve entre 0 y 3 expresiones de 1 a 4 palabras, copiadas LITERALMENTE del texto, que sean clave para ese motivo. No marques relleno, saludos ni palabras genéricas; si nada es relevante, devuelve una lista vacía. "+
      "tipo «foco»: tema, motivación, objeción o emoción que conviene profundizar. tipo «dato»: cifra, nombre, plazo, importe o decisión concreta. "+
-     "«codigo»: etiqueta de 2 a 5 letras mayúsculas que resume el tema (por ejemplo PRE, PLAZ, CONF).\n\nTEXTO DE LA PERSONA:\n"+texto;
+     "«codigo»: elige el que mejor encaje de esta lista: "+Object.entries(COD).map(([k,v])=>k+" ("+v[0]+")").join(", ")+".\n\nTEXTO DE LA PERSONA:\n"+texto;
     const r=await I.llamaTexto(M.modelo,clave,prompt,SCHEMA);
     return valida(texto,r.datos&&r.datos.claves);
   }
@@ -392,8 +392,8 @@ function crea(o){
     let p=0;
     for(const m of ms){
       if(m.s>p) f.append(t.slice(p,m.s));
-      const k=document.createElement("mark"); k.className="kw kw-"+m.tipo; k.textContent=t.slice(m.s,m.e); f.append(k);
-      const b=document.createElement("sup"); b.className="kw-bd kw-"+m.tipo; b.textContent=m.codigo+(m.tipo==="foco"?" ?":""); b.title=m.tipo==="foco"?"Tema que conviene profundizar":"Dato concreto"; f.append(b);
+      const k=document.createElement("mark"); k.className="kw kw-"+m.tipo; k.style.backgroundColor=COD[m.codigo][1]; k.textContent=t.slice(m.s,m.e); f.append(k);
+      const b=document.createElement("sup"); b.className="kw-bd kw-"+m.tipo; b.style.backgroundColor=COD[m.codigo][1]; b.textContent=m.codigo+(m.tipo==="foco"?" ?":""); b.title=COD[m.codigo][0]+(m.tipo==="foco"?" · tema que conviene profundizar":" · dato concreto"); f.append(b);
       p=m.e;
     }
     if(p<t.length) f.append(t.slice(p));
