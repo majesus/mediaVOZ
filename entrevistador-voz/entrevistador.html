@@ -94,7 +94,7 @@
     <p class="small" style="margin:.25rem 0 .4rem">Describa su negocio y la conversación que desea automatizar. Gemini propondrá todos los campos; usted los revisa y los edita. Se usa la clave del campo «Clave API de Gemini» y el texto se envía a Google.</p>
     <label for="descNeg">Descripción del negocio y de la conversación</label>
     <textarea id="descNeg" rows="4" placeholder="Ej.: Tenemos una clínica dental con tres gabinetes. Queremos que un asistente atienda llamadas de pacientes que preguntan por tratamientos, precios orientativos y citas."></textarea>
-    <div class="fila2"><div><label for="mTexto">Modelo de texto</label><input id="mTexto" value="gemini-2.5-flash"></div><button type="button" id="genCfg">Generar configuración</button></div>
+    <div class="fila2"><div><label for="mTexto">Modelo de texto</label><input id="mTexto" value="gemini-flash-latest"></div><button type="button" id="genCfg">Generar configuración</button></div>
     <p id="msgAsist" role="status" aria-live="polite"></p>
   </div>
   <label for="caso">Caso de uso</label>
@@ -247,11 +247,27 @@ CAMPOS.forEach(f => $(f).addEventListener("input", vista));
 
 /* ===== v2f: asistente de configuración, informe, CSV y ejemplo ===== */
 const GEN="https://generativelanguage.googleapis.com/v1beta/models/";
+async function errGoogle(r){ let m=""; try{ m=(await r.json())?.error?.message||""; }catch{} return "Google respondió HTTP "+r.status+(m?": "+m:"")+"."; }
+async function modeloDisponible(clave){
+  const r=await fetch(GEN.replace(/models\/$/,"models")+"?pageSize=200",{credentials:"omit",cache:"no-store",headers:{"x-goog-api-key":clave}});
+  if(!r.ok) throw new Error(await errGoogle(r));
+  const ms=((await r.json()).models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent")).map(m=>m.name.replace(/^models\//,""));
+  const quita=n=>/(live|tts|image|embed|audio|vision|thinking|preview-\d|exp|learnlm|gemma|robotics|computer)/i.test(n);
+  const buenos=ms.filter(n=>!quita(n));
+  const pref=["gemini-flash-latest","gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash"];
+  return pref.find(n=>buenos.includes(n)) || buenos.find(n=>/flash/i.test(n)&&!/lite/i.test(n)) || buenos.find(n=>/flash/i.test(n)) || buenos[0] || null;
+}
 async function llamaTexto(modelo, clave, prompt, schema){
-  const r=await fetch(GEN+encodeURIComponent(modelo)+":generateContent",{method:"POST",credentials:"omit",cache:"no-store",
-    headers:{"Content-Type":"application/json","x-goog-api-key":clave},
-    body:JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.3,responseMimeType:"application/json",responseSchema:schema}})});
-  if(!r.ok) throw new Error("Google respondió HTTP "+r.status+". Revise la clave y el nombre del modelo de texto.");
+  const cuerpo=JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.3,responseMimeType:"application/json",responseSchema:schema}});
+  const envia=async m=>fetch(GEN+encodeURIComponent(m)+":generateContent",{method:"POST",credentials:"omit",cache:"no-store",headers:{"Content-Type":"application/json","x-goog-api-key":clave},body:cuerpo});
+  let r=await envia(modelo);
+  if(r.status===404){            // el modelo no existe para esta clave: se busca uno disponible y se reintenta una vez
+    const alt=await modeloDisponible(clave);
+    if(!alt || alt===modelo) throw new Error(await errGoogle(r));
+    r=await envia(alt);
+    if(r.ok){ $("mTexto").value=alt; }
+  }
+  if(!r.ok) throw new Error(await errGoogle(r));
   const j=await r.json(), t=j?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
   if(!t) throw new Error("Respuesta vacía del modelo.");
   return JSON.parse(t.replace(/^```json\s*|```\s*$/g,""));
@@ -277,7 +293,7 @@ $("genCfg").onclick = async () => {
     vista();
     const pend=($("datos").value.match(/\[COMPLETAR/g)||[]).length;
     m.textContent="Configuración generada. Revise cada campo"+(pend?"; faltan "+pend+" dato(s) marcados como [COMPLETAR].":".");
-  }catch(e){ m.textContent="No se pudo generar: "+e.message; }
+  }catch(e){ m.textContent="No se pudo generar: "+e.message+" Los campos no se han modificado."; }
   $("genCfg").disabled=false;
 };
 
