@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Asistente de voz · versión editable</title>
+<style>
+  :root{--bg:#f4f1ea;--ink:#1d2b2f;--mut:#5d6b6e;--acc:#2f5d62;--line:#d9d3c4;--card:#fbf9f4}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+  header{padding:.9rem 2rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:1rem}
+  header b{font:600 1.15rem Georgia,serif}header .sub{color:var(--mut);font-size:.85rem;margin-left:.8rem}
+  #btnCfg{display:inline-flex;align-items:center;gap:.5rem;background:var(--acc);color:#fff;font-size:.9rem}
+  #btnCfg svg{width:1.05rem;height:1.05rem;transition:transform .3s}
+  #btnCfg[aria-expanded="true"]{background:none;color:var(--acc);border:1px solid var(--acc)}
+  #btnCfg[aria-expanded="true"] svg{transform:rotate(90deg)}
+  :focus-visible{outline:3px solid #e0a82e;outline-offset:2px}
+  main{display:flex;align-items:flex-start;padding:1.5rem 2rem}
+  section{background:var(--card);border:1px solid var(--line)}
+  #sala{flex:1;min-width:0;padding:1.2rem 1.3rem}
+  #sala .in{max-width:1000px;margin:0 auto}
+  #resumen{color:var(--mut);font-size:.85rem;margin:0 0 .4rem}
+  #config{flex:0 0 auto;width:0;margin-left:0;border-width:0;overflow:hidden;opacity:0;max-height:calc(100vh - 7rem);transition:width .3s ease,margin .3s ease,opacity .25s ease}
+  #config .cfg-in{width:min(540px,45vw);padding:1.2rem 1.3rem}
+  main.abierto #config{width:min(540px,45vw);margin-left:1.5rem;border-width:1px;opacity:1;overflow-y:auto}
+  #log{height:calc(100vh - 23rem);min-height:300px}
+  main:not(.abierto) #log{font-size:1.12rem}
+  @media(prefers-reduced-motion:reduce){#config,#btnCfg svg{transition:none}}
+  @media(max-width:860px){main{flex-direction:column;padding:1rem}main.abierto #config{width:100%;margin:1rem 0 0}#config .cfg-in{width:100%}header .sub{display:none}}
+  h2{font:600 .72rem system-ui;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);margin:0 0 .8rem}
+  label{display:block;margin:.75rem 0 .2rem;font-weight:600;font-size:.85rem}
+  label small{font-weight:400;color:var(--mut)}
+  input,select,textarea{width:100%;font:inherit;padding:.5rem .6rem;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  textarea{resize:vertical}
+  .fila{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem}
+  button{font:600 .85rem system-ui;background:var(--acc);color:#fff;border:0;padding:.6rem 1.1rem;cursor:pointer}
+  button.sec{background:none;color:var(--acc);border:1px solid var(--acc)}
+  button:disabled{opacity:.4;cursor:default}
+  .acciones{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
+  #estado{display:flex;align-items:center;gap:.5rem;color:var(--mut);font-size:.9rem;margin-bottom:.6rem}
+  #punto{width:.7rem;height:.7rem;border-radius:50%;background:#b9b3a3}
+  #punto.on{background:#2e9e6b;box-shadow:0 0 0 4px rgba(46,158,107,.2)}
+  #log{border-top:1px solid var(--line);margin-top:1rem;padding-top:.8rem;overflow:auto}
+  .t{margin:0 0 .7rem}.t b{display:block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+  .t.ia b{color:var(--acc)}
+  .small{font-size:.8rem;color:var(--mut);margin:.4rem 0}
+  .vacio{color:var(--mut);font-style:italic}
+  details{margin-top:.8rem}summary{cursor:pointer;color:var(--acc);font-size:.85rem}
+  pre{white-space:pre-wrap;font-size:.78rem;background:#fff;border:1px solid var(--line);padding:.7rem;max-height:200px;overflow:auto}
+#falt .dud{display:block;margin-top:.7rem}
+
+.asist{border:1px solid var(--line,#d9d4c7);background:#fff;padding:.9rem 1rem;margin:.2rem 0 1rem}
+.asist textarea{min-height:5.5rem}
+.asist .fila2{display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;margin-top:.6rem}
+.asist .fila2 div{flex:1 1 12rem}
+#msgAsist,#msgInf{margin:.5rem 0 0;font-size:.9rem;min-height:1.2em}
+#informe{margin-top:1.2rem;border-top:1px solid var(--line,#d9d4c7);padding-top:1rem}
+#informe h3{font-size:1.02rem;margin:1rem 0 .3rem}
+#informe .aviso{font-size:.86rem;color:#626262}
+#informe blockquote{margin:.25rem 0;padding-left:.8rem;border-left:3px solid #9bb3b3}
+#informe .nolit{color:#8a5a00;font-size:.82rem}
+#informe table{border-collapse:collapse;width:100%;font-size:.93rem}#informe td,#informe th{border-bottom:1px solid #e3dfd2;padding:.3rem .4rem;text-align:left;vertical-align:top}
+</style>
+</head>
+<body>
+<header><div><b>Asistente de voz</b><span class="sub">Todo se ejecuta en su navegador</span></div>
+<button id="btnCfg" type="button" aria-expanded="false" aria-controls="config"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span>Configurar</span></button></header>
+<main>
+<section id="sala"><div class="in">
+  <h2>Entrevista</h2>
+  <p id="resumen"></p>
+  <label for="clave">Clave API de Gemini <small>(solo se usa en esta pestaña; no se guarda)</small></label>
+  <input id="clave" type="password" autocomplete="off" placeholder="AIza…">
+  <div class="acciones"><button id="ini">Iniciar entrevista</button><button class="sec" id="fin" disabled>Finalizar</button><button class="sec" id="desc" disabled>Descargar transcripción</button><button class="sec" id="csv" disabled>Descargar CSV</button><button class="sec" id="demo" type="button" title="Carga una conversación escrita a mano para probar el informe sin micrófono">Conversación de ejemplo</button></div>
+  <p id="estado" style="margin-top:1rem"><i id="punto"></i><span id="txtEstado">En espera.</span><span id="reloj" style="margin-left:auto">00:00</span></p>
+  <div id="log"><p class="vacio">Aquí aparecerá la conversación.</p></div>
+  <div id="falt" class="small"></div>
+  <section id="informe" hidden aria-label="Informe de la entrevista">
+    <h2 style="font-size:1.15rem">Informe de la entrevista</h2>
+    <p class="aviso">Generado automáticamente a partir de la transcripción. Las citas se comprueban contra el texto; revise el contenido antes de usarlo. Al generarlo, la transcripción se envía a Google.</p>
+    <div class="fila2" style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap">
+      <div style="flex:1 1 14rem"><label for="claveInf">Clave API de Gemini <small>(no se guarda)</small></label><input id="claveInf" type="password" autocomplete="off" placeholder="AIza…"></div>
+      <button type="button" id="genInf">Generar informe</button><button type="button" class="sec" id="descInf" disabled>Descargar informe</button>
+    </div>
+    <p id="msgInf" role="status" aria-live="polite"></p>
+    <div id="infOut"></div>
+  </section>
+</div></section>
+<section id="config" aria-label="Configuración de la entrevista" inert aria-hidden="true">
+<div class="cfg-in">
+  <h2>Configuración de la entrevista</h2>
+  <div class="asist" id="asist">
+    <b>Asistente de configuración</b>
+    <p class="small" style="margin:.25rem 0 .4rem">Describa su negocio y la conversación que desea automatizar. Gemini propondrá todos los campos; usted los revisa y los edita. Se usa la clave del campo «Clave API de Gemini» y el texto se envía a Google.</p>
+    <label for="descNeg">Descripción del negocio y de la conversación</label>
+    <textarea id="descNeg" rows="4" placeholder="Ej.: Tenemos una clínica dental con tres gabinetes. Queremos que un asistente atienda llamadas de pacientes que preguntan por tratamientos, precios orientativos y citas."></textarea>
+    <div class="fila2"><div><label for="mTexto">Modelo de texto</label><input id="mTexto" value="gemini-2.5-flash"></div><button type="button" id="genCfg">Generar configuración</button></div>
+    <p id="msgAsist" role="status" aria-live="polite"></p>
+  </div>
+  <label for="caso">Caso de uso</label>
+  <select id="caso"></select>
+
+  <label for="rol">Rol del asistente</label>
+  <input id="rol">
+  <label for="objetivo">Objetivo de la conversación</label>
+  <textarea id="objetivo" rows="3"></textarea>
+  <div class="fila">
+    <div><label for="tono">Tono</label><select id="tono"><option>cordial y formal</option><option>amable y neutral</option><option>cercano y natural</option><option>neutro y profesional</option><option>exigente y directo</option></select></div>
+    <div><label for="idioma">Idioma</label><select id="idioma"><option>español de España</option><option>español latinoamericano</option><option>inglés</option><option>francés</option><option>portugués</option></select></div>
+    <div><label for="dur">Duración (min)</label><select id="dur"><option>3</option><option>5</option><option selected>8</option><option>10</option><option>15</option></select></div>
+  </div>
+  <label for="saludo">Primera indicación al asistente <small>(para que inicie la conversación; vacío = espera a que hable la persona)</small></label>
+  <input id="saludo">
+  <label for="guia">Preguntas guía <small>(una por línea; el asistente las plantea una a una)</small></label>
+  <textarea id="guia" rows="5"></textarea>
+  <label for="ctx">Contexto de la empresa <small>(quién es, qué vende, a quién atiende)</small></label>
+  <textarea id="ctx" rows="3"></textarea>
+  <label for="datos">Datos adicionales que el asistente consulta <small>(preguntas frecuentes, tarifas, catálogo, políticas…)</small></label>
+  <textarea id="datos" rows="6"></textarea>
+  <label for="aleat">Elementos a presentar en orden aleatorio <small>(uno por línea; la página sortea el orden en cada sesión; vacío = ninguno)</small></label>
+  <textarea id="aleat" rows="2"></textarea>
+  <label for="cierre">Frase de despedida que cierra la sesión <small>(al oírla, la página deja de enviar audio y finaliza; vacío = no se cierra sola)</small></label>
+  <input id="cierre">
+  <label for="faltas">Frase con la que el asistente indica que un dato no consta <small>(la página anota la pregunta de la persona; vacío = no se anota)</small></label>
+  <input id="faltas">
+  <label for="dudosas">Frases que marcan una respuesta dudosa <small>(una por línea, «frase | etiqueta»; la página anota la respuesta anterior de la persona en un apartado para el investigador; vacío = no se anota)</small></label>
+  <textarea id="dudosas" rows="2"></textarea>
+  <details id="dprot"><summary>Protocolo completo (avanzado)</summary>
+    <p id="aviso" class="small"></p>
+    <textarea id="protocolo" rows="8" placeholder="Opcional. Si se rellena, se envía tal cual al asistente y sustituye a la composición automática."></textarea>
+  </details>
+  <div class="acciones">
+    <button class="sec" id="cargar">Añadir archivo de texto…</button>
+    <button class="sec" id="gcfg">Guardar configuración</button>
+    <button class="sec" id="lcfg">Abrir configuración…</button>
+    <input type="file" id="fich" accept=".txt,.md,.csv,.json" multiple hidden>
+    <input type="file" id="fcfg" accept=".json" hidden>
+  </div>
+  <div class="fila" style="grid-template-columns:1fr 1fr">
+    <div><label for="voz">Voz</label><select id="voz"><option>Kore</option><option>Aoede</option><option>Puck</option><option>Charon</option><option>Zephyr</option></select></div>
+    <div><label for="modelo">Modelo</label><input id="modelo" value="gemini-3.8-live"></div>
+  </div>
+  <details><summary>Ver las instrucciones completas que recibirá el asistente</summary><pre id="prev"></pre></details>
+</div>
+</section>
+</main>
+
+<script>
+const CASOS = {
+ atencion:{n:"Atención al cliente",rol:"Asistente de atención al cliente de Casa Verde",objetivo:"Resolver dudas sobre pedidos, envíos y devoluciones y derivar a una persona lo que no pueda resolver",tono:"cordial y formal",dur:"5",
+  guia:"Pregunta en qué puede ayudar\nSi es un pedido, pide el número\nConfirma que la duda queda resuelta",
+  ctx:"Casa Verde es una tienda online ficticia de plantas de interior y macetas. Atiende a particulares de España peninsular.",
+  datos:"Envíos: 2 a 4 días laborables; gratis desde 40 € de compra.\nDevoluciones: 30 días desde la entrega, producto sin usar.\nPlantas: garantía de 14 días si llegan dañadas; enviar foto.\nHorario de atención humana: lunes a viernes, de 9:00 a 18:00.\nPago: tarjeta, Bizum y transferencia.",
+  saludo:"Salude brevemente y pregunte en qué puede ayudar."},
+ clientes:{n:"Entrevista a clientes",rol:"Entrevistador de Bodega Alameda",objetivo:"Conocer por qué compran nuestro vino, qué les frena y qué mejorarían",tono:"cercano y natural",dur:"8",
+  guia:"¿Cómo conoció la bodega?\n¿Qué le llevó a comprar la última vez?\n¿Qué echó en falta o le generó dudas?\n¿Lo recomendaría? ¿Por qué?\n¿Qué cambiaría?",
+  ctx:"Bodega Alameda es una bodega familiar ficticia que vende por internet y en tienda propia.",
+  datos:"Gama: tinto joven, crianza, reserva y blanco de verdejo.\nPrecio medio de botella: entre 7 y 18 €.\nCanal principal: web; segundo canal: tienda en la bodega.",
+  saludo:"Preséntese, explique que la conversación dura unos minutos y formule la primera pregunta."},
+ onboarding:{n:"Onboarding de empleados",rol:"Asistente de bienvenida para nuevas incorporaciones de Casa Verde",objetivo:"Resolver las dudas de la primera semana: horarios, herramientas, personas de contacto y normas",tono:"cercano y natural",dur:"8",
+  guia:"Pregunta por su puesto y su primer día\nComprueba qué ha entendido de las normas básicas\nAnota las dudas que no pueda resolver",
+  ctx:"Casa Verde es una tienda online ficticia con 12 personas: almacén, atención al cliente y administración.",
+  datos:"Horario general: 8:30 a 17:30, con una hora para comer.\nPrimera semana: formación con su responsable el lunes; acceso a herramientas el martes.\nBajas y permisos: se comunican a administración por correo y a su responsable.\nTeletrabajo: dos días por semana a partir del segundo mes.",
+  saludo:"Dé la bienvenida y pregunte cómo ha ido el primer día."},
+ comercial:{n:"Preparación comercial",rol:"Director de compras de una cadena de hoteles, algo escéptico",objetivo:"Ensayar con un comercial la presentación de un producto: plantear objeciones realistas y evaluar al final su propuesta",tono:"exigente y directo",dur:"8",
+  guia:"Pide que presente la propuesta en un minuto\nPlantea una objeción de precio\nPlantea una objeción de plazo de entrega\nAl final, di qué te ha convencido y qué no",
+  ctx:"El comercial vende EcoLimp, una línea ficticia de productos de limpieza ecológicos para hoteles.",
+  datos:"EcoLimp: concentrado de 5 litros, 38 € por unidad; descuento del 10% desde 50 unidades.\nPlazo de entrega: 5 días laborables.\nCertificado ecológico europeo vigente.",
+  saludo:"Preséntese como comprador y espere a que el comercial inicie su propuesta."},
+ feedback:{n:"Recogida de feedback",rol:"Entrevistador de calidad de un centro de formación",objetivo:"Recoger la opinión de una persona que acaba de terminar un curso, en pocos minutos",tono:"neutro y profesional",dur:"5",
+  guia:"¿Qué esperaba del curso y qué encontró?\n¿Qué fue lo más útil?\n¿Qué mejoraría?\n¿Lo recomendaría, del 0 al 10?",
+  ctx:"Centro de formación ficticio que imparte cursos breves de ofimática para empresas.",
+  datos:"Curso: Hojas de cálculo aplicadas, 20 horas, formato presencial.",
+  saludo:"Salude, explique que son cuatro preguntas breves y empiece."},
+ seleccion:{n:"Entrevista de selección (primer contacto)",rol:"Entrevistador de primer contacto de Casa Verde; no evalúa, solo recoge información",objetivo:"Conocer la experiencia y la disponibilidad de la persona candidata para el puesto de atención al cliente",tono:"cordial y formal",dur:"10",
+  guia:"Pide que se presente brevemente\n¿Qué experiencia previa tiene atendiendo clientes?\n¿Qué disponibilidad horaria tiene?\n¿Qué dudas tiene sobre el puesto?",
+  ctx:"Casa Verde es una tienda online ficticia que busca una persona para atención al cliente.",
+  datos:"Puesto: atención al cliente, jornada completa, 8:30 a 17:30.\nFunciones: correo, teléfono y chat; seguimiento de devoluciones.\nNo des opinión sobre la idoneidad de la persona ni comuniques decisiones: la decisión es siempre de una persona del equipo.",
+  saludo:"Salude, explique el propósito de la conversación y pida que se presente."}
+};
+const $ = id => document.getElementById(id);
+CASOS.yogur = {
+ "n": "Test de conceptos (yogur) · investigación de mercados",
+ "rol": "Entrevistadora de investigación de mercados",
+ "objetivo": "Recoger, con consentimiento expreso y datos anónimos, la intención de compra y sus motivos ante dos conceptos de yogur (LactoFit y CampoVivo)",
+ "tono": "amable y neutral",
+ "idioma": "español de España",
+ "dur": "10",
+ "saludo": "Comience la entrevista con el paso 1.",
+ "guia": "Consentimiento expreso\nEdad, género y frecuencia de compra de yogures\nPor concepto: lectura literal, qué haría en la tienda, sondeo abierto y escala de 1 a 5\nSi falta un dato: lo dice con naturalidad y pregunta cómo lo valoraría\nCierre: una sola despedida",
+ "ctx": "Estudio académico de investigación de mercados. Participación voluntaria, con consentimiento expreso y datos anónimos. Las fichas de producto de «Datos adicionales» son ficticias.",
+ "datos": "FICHAS DE PRODUCTO (contenido ficticio de prueba; no lo menciones a la persona)\n\nFicha LactoFit\n- Marca: LactoFit.\n- Formato: pack de 4 unidades de 125 g (500 g en total). Precio: 3,20 € el pack (0,80 € por unidad).\n- Ingredientes: leche desnatada pasteurizada, proteínas de la leche y fermentos lácticos. Sin edulcorantes artificiales.\n- Información nutricional por 100 g: 62 kcal; proteínas 10 g; azúcares 3,8 g, procedentes de la lactosa de la leche, sin azúcares añadidos; grasa 0,2 g.\n- El «40 % menos de azúcar» se refiere a la media de los yogures azucarados de su categoría.\n- Alérgenos: contiene leche (lactosa).\n- Caducidad: 28 días desde el envasado; conservar entre 1 y 5 °C.\n- Distribución prevista: supermercados y tiendas de nutrición deportiva, en la sección de refrigerados.\n- Certificaciones: ninguna certificación ecológica ni sello de origen.\n- Envase: tarrina de polipropileno reciclable, con cartón exterior.\n\nFicha CampoVivo\n- Marca: CampoVivo, de una cooperativa de pequeñas granjas de la región.\n- Formato: pack de 4 tarros de cristal de 125 g (500 g en total); los tarros son retornables y se devuelven limpios en la tienda. Precio: 3,20 € el pack (0,80 € por unidad).\n- Ingredientes: leche entera de pastoreo local y fermentos lácticos. Sin azúcares añadidos, sin edulcorantes y sin conservantes.\n- Información nutricional por 100 g: 66 kcal; proteínas 3,8 g; azúcares 4,5 g, procedentes de la lactosa de la leche, sin azúcares añadidos; grasa 3,6 g.\n- Alérgenos: contiene leche (lactosa).\n- Caducidad: 18 días desde la elaboración; conservar entre 1 y 5 °C.\n- Distribución prevista: tiendas de alimentación local y mercados de productores de la región.\n- Certificaciones: sello regional de producción local; sin certificación ecológica.\n- Envase: tarro de cristal con tapa de aluminio.",
+ "aleat": "Concepto A (LactoFit)\nConcepto B (CampoVivo)",
+ "protocolo": "Eres una entrevistadora de investigación de mercados que conversa por voz con una persona. Hablas siempre en español, con tono cálido, tranquilo y neutral. Tu objetivo es que la persona se sienta escuchada y hable con libertad sobre cómo compra; no estás rellenando un formulario.\n\nESTILO\n- Conversa, no leas un cuestionario. Usa frases cortas y un ritmo natural, como en una charla sin prisa. Una sola pregunta cada vez, en turnos breves, y deja que la persona termine; si duda, concédele tiempo.\n- Muestra que escuchas. Tras cada respuesta, antes de preguntar, haz un comentario breve que se refiera a algo concreto de lo que la persona ha dicho («ah, el tarro de cristal…», «ah, lo de la diabetes de su mujer», «vale, lo de la etiqueta»), con fórmulas neutras que no valoran ni opinan. Varía las fórmulas y no repitas la misma dos veces seguidas. Deja pausas naturales, no encadenes preguntas sin transición y adapta el ritmo al de la persona: más pausado si habla despacio, más ágil si responde con rapidez.\n- Cuando convenga, reformula con pocas palabras lo que acaba de decir («Si le he entendido bien, …») sin añadir interpretaciones, y enlaza tu siguiente pregunta con sus propias palabras. Usa transiciones naturales y no repitas estructuras de frase idénticas entre un concepto y otro.\n- No opinas, no valoras las respuestas, no das pistas sobre qué se espera, no sugieres motivos ni ofreces opciones de respuesta (salvo las categorías de frecuencia y los extremos de la escala). No mencionas inteligencia artificial, hipótesis ni comparaciones entre productos. Si la persona te pide tu opinión, dile con amabilidad que prefieres no condicionarla porque lo que importa es la suya. Si pregunta por la hipótesis o por el objetivo del estudio, dile que no puedes comentarlo hasta que termine el estudio.\n- La transcripción de la voz puede contener errores. Si la persona deforma o confunde el nombre de un producto, sigue usando el nombre correcto con naturalidad («hablamos de CampoVivo») sin corregirla de forma tajante.\n- Si hace una pregunta inocua y ajena al estudio, respóndele en una frase y retoma la conversación.\n\nCRITERIO Y PRESENCIA\nEres una persona atenta, con sentido común, no un sistema que acepta todo lo que oye. Si algo no encaja con lo que ya ha dicho o con la realidad, lo notas y lo manejas con la naturalidad de una buena entrevistadora, sin juzgar, sin regañar, sin sermonear y sin dejar traslucir que estás comprobando nada.\n1. Respuestas inverosímiles. Si la persona dice algo difícil de creer (una cantidad imposible, como ocho yogures al día todos los días de la semana, una cifra incoherente con su frecuencia de compra, una edad absurda), no lo aceptes como si nada ni lo cuestiones con dureza. Muestra una sorpresa amable y pide que lo cuente con sus palabras, de forma abierta y sin sugerir la respuesta, empezando por las palabras del punto 4: «¿Ocho al día? Quiero asegurarme de haberle entendido bien; cuénteme un poco cómo es eso.» Si lo explica con sentido, acéptalo y sigue. Si se retracta o aclara que era exagerado, dilo con naturalidad («vale, entonces más bien…») y pide el dato real con sus palabras.\n2. Bromas. Si la persona bromea, reconócelo con una sonrisa breve («ja, vale», «me ha hecho gracia») y reconduce con suavidad a la pregunta pendiente. No sigas la broma ni la alargues, y no la tomes en serio como dato.\n3. Temas ajenos o inadecuados. Si la persona introduce un asunto ajeno al estudio o inadecuado (drogas, salud, temas personales graves, política, insultos) o pregunta si el producto es compatible con algo así, no entres en el asunto, no lo valores ni lo comentes. Haz un reencuadre breve y cordial usando estas palabras: «eso se sale de lo que puedo comentarle; volvamos al yogur» (puedes añadir una frase de cortesía). Si insiste una segunda vez, repite el reencuadre una sola vez más y ofrécele con amabilidad dejarlo aquí. Si acepta, o si te lo pide, pasa directamente al cierre del paso 4. Si habla de algo doloroso para ella misma, responde primero con una frase humana y sencilla de comprensión, y después reencuadra sin insistir.\n4. Control de calidad. Mientras conversas, toma nota mental de las respuestas dudosas o inconsistentes: cantidades o frecuencias imposibles o que contradicen lo que dijo antes, edades que no cuadran, una nota que no concuerda con lo expresado. Pide una aclaración UNA sola vez por respuesta, de forma abierta, empezando por estas palabras: «Quiero asegurarme de haberle entendido bien». Por ejemplo: «Quiero asegurarme de haberle entendido bien: antes me dijo que compra yogures rara vez y ahora que ocho al día; ¿cómo lo ve usted?» Después de esa pregunta, acepta lo que responda, sea lo que sea, y continúa. No repitas la pregunta ni insistas más. Nunca digas que estás anotando o marcando respuestas, ni uses las palabras «dudosa», «incoherente» o «inconsistente» con la persona.\n5. Coherencia con la valoración. Si la puntuación del 1 al 5 contradice claramente lo que la persona acaba de decir (por ejemplo, ha dicho que lo compraría y puntúa 1), pregunta con tacto cuál refleja mejor su postura usando esas mismas palabras de apertura («Quiero asegurarme de haberle entendido bien: …») y sin sugerir cuál es la correcta. Confirma el número que dé después y sigue.\n6. Límites. Todo esto debe sonar natural y no interrumpir el estudio: como máximo tres aclaraciones en toda la sesión; si la persona es clara y coherente, no hay nada que aclarar y no debes inventar dudas. Sigue siendo neutral: no opines, no des pistas sobre la respuesta esperada, no menciones hipótesis, comparaciones ni inteligencia artificial, y lee siempre el texto literal de los conceptos.\n\nDESARROLLO\nPaso 1. Saluda con naturalidad y explica en pocas frases que la conversación dura unos 5 minutos, que no hay respuestas correctas y que los datos serán anónimos y se usarán solo en un trabajo académico. Pide consentimiento expreso para continuar. Si no lo da con claridad, no continúes: agradécele y cierra la conversación.\n\nPaso 2. Pregunta, de una en una y de forma conversacional, la edad, el género y con qué frecuencia compra yogures (nunca, rara vez, a veces o a menudo).\n\nPaso 3. Presenta los conceptos de uno en uno, en el orden asignado para esta sesión (figura en la última línea de estas instrucciones). Para cada concepto, anuncia con una frase natural que vas a describir un producto y lee el texto literal, sin añadir ni quitar nada. Concepto A, LactoFit: «Yogur natural alto en proteínas, con un 40 % menos de azúcar, pensado para quien hace deporte o cuida su alimentación. Se vende en un pack de 4 unidades y mantiene la textura cremosa sin edulcorantes artificiales. Precio: 3,20 € el pack de 4.» Concepto B, CampoVivo: «Yogur natural de leche de pastoreo local, elaborado de forma artesanal y con un sabor tradicional y cremoso. Procede de pequeñas granjas de la región y se vende en un tarro de cristal retornable. Precio: 3,20 € el pack de 4.»\nDespués de leerlo, plantea con tus palabras la pregunta central: qué haría la persona, como compradora, si viera ese producto en la tienda, si lo compraría o no, y por qué. Formúlala con naturalidad y de forma distinta cada vez.\nEscucha y profundiza con una o dos repreguntas abiertas que retomen sus propias palabras («¿qué es lo que le haría dudar?», «¿en qué momento lo compraría?», «cuando dice …, ¿a qué se refiere?»). No sugieras motivos ni ofrezcas alternativas. Si ya ha explicado con claridad qué haría y por qué, no insistas. Como máximo, dos repreguntas por concepto.\nA continuación recoge la valoración numérica de forma natural: pídele que, si tuviera que ponerle un número del 1 al 5, donde 1 es «seguro que no lo compraría» y 5 es «seguro que lo compraría», cuál elegiría. Menciona siempre los dos extremos. Si lo que responde no es un número del 1 al 5, vuelve a pedírselo con naturalidad. Confirma solo el número («Un 2, de acuerdo») y continúa con una transición natural.\n\nPaso 4. Cuando hayas terminado los dos conceptos, pregunta con naturalidad si quiere añadir algo y escucha. Si la persona te pregunta si quieres preguntarle algo más, responde que por tu parte ya has terminado. Después agradécele su tiempo y despídete una sola vez, sin comentar resultados, terminando exactamente con la frase «Que tenga un buen día.». Después de esa frase no vuelvas a hablar, aunque la persona siga diciendo algo.\n\nDATOS DE LOS PRODUCTOS\nAl final de estas instrucciones figuran las fichas de producto. Consúltalas solo si la persona te pregunta por un dato del producto: no las ofrezcas, no las resumas ni las leas por iniciativa propia.\n- Si el dato está en la ficha o en el texto del concepto, respóndelo tal como figura, en una frase, y retoma la conversación.\n- Si el dato no consta, no lo inventes ni lo deduzcas. Dile con naturalidad que ese dato «no figura en la descripción del producto» (usa estas palabras) y pregúntale cómo lo valoraría sin él («¿qué supondría usted?», «¿cómo lo tendría en cuenta a la hora de decidir?»). Después sigue con la conversación.\n- Si pregunta si el producto ya está a la venta, dile que forma parte de un estudio y que solo dispones de su descripción.",
+ "cierre": "Que tenga un buen día.",
+ "faltas": "no figura en la descripción",
+ "dudosas": "Quiero asegurarme de haberle entendido bien | Aclaración pedida\neso se sale de lo que puedo comentarle | Fuera de tema"
+};
+const CAMPOS = ["rol","objetivo","tono","idioma","dur","saludo","guia","ctx","datos","aleat","cierre","faltas","dudosas","protocolo"];
+for(const [k,c] of Object.entries(CASOS)) $("caso").add(new Option(c.n,k));
+
+function cargaCaso(k){ const c=CASOS[k]; CAMPOS.forEach(f=>{ if(c[f]!==undefined) $(f).value=c[f]; else if(["datos","aleat","cierre","faltas","dudosas","protocolo"].includes(f)) $(f).value=""; }); vista(); }
+$("caso").onchange = () => cargaCaso($("caso").value);
+
+function barajar(items){                      // Fisher-Yates con generador criptográfico
+  const a=[...items], r=new Uint32Array(a.length); crypto.getRandomValues(r);
+  for(let i=a.length-1;i>0;i--){ const j=r[i]%(i+1); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+const elementos = () => $("aleat").value.split("\n").map(s=>s.trim()).filter(Boolean);
+const lineaOrden = orden => !orden ? "" : orden.sorteo
+  ? "ORDEN DE PRESENTACIÓN: se sortea al iniciar cada sesión entre: "+orden.sorteo.join("; ")+"."
+  : "ORDEN DE PRESENTACIÓN ASIGNADO PARA ESTA SESIÓN (úsalo en lugar de elegir tú el orden): "+orden.map((x,i)=>(i+1)+".º "+x).join("; ")+".";
+function instrucciones(orden){
+  const p = $("protocolo").value.trim();
+  const ord = lineaOrden(orden);
+  if(p){ const d=$("datos").value.trim();   // protocolo íntegro: solo se añaden los datos adicionales y el orden sorteado
+    return p + (d ? "\n\nDATOS ADICIONALES (para consultar solo si la persona pregunta):\n"+d : "") + (ord ? "\n\n"+ord : ""); }
+  const g = $("guia").value.split("\n").map(s=>s.trim()).filter(Boolean);
+  return [
+    "ROL: "+$("rol").value,
+    "OBJETIVO: "+$("objetivo").value,
+    "TONO: "+$("tono").value+". IDIOMA: "+$("idioma").value+".",
+    "DURACIÓN: cierra la conversación en unos "+$("dur").value+" minutos y avisa cuando falte poco.",
+    g.length ? "PREGUNTAS GUÍA (una cada vez, sin leerlas como lista):\n- "+g.join("\n- ") : "",
+    $("ctx").value.trim() ? "CONTEXTO DE LA EMPRESA:\n"+$("ctx").value.trim() : "",
+    $("datos").value.trim() ? "DATOS ADICIONALES (única fuente para hechos concretos de la empresa):\n"+$("datos").value.trim() : "",
+    ord,
+    "NORMAS: frases breves; una pregunta cada vez; no inventes cifras, precios ni plazos; si un dato no figura en el contexto o en los datos adicionales, dilo y ofrece derivar a una persona; no pidas datos personales innecesarios."
+  ].filter(Boolean).join("\n\n");
+}
+const alternar = abrir => {
+  const m=document.querySelector("main"), b=$("btnCfg");
+  m.classList.toggle("abierto",abrir); $("config").inert=!abrir; $("config").setAttribute("aria-hidden",String(!abrir));
+  b.setAttribute("aria-expanded",String(abrir)); b.querySelector("span").textContent = abrir ? "Cerrar configuración" : "Configurar";
+};
+$("btnCfg").onclick = () => alternar(!document.querySelector("main").classList.contains("abierto"));
+document.addEventListener("keydown", e => { if(e.key==="Escape" && document.querySelector("main").classList.contains("abierto") && $("config").contains(document.activeElement)){ alternar(false); $("btnCfg").focus(); } });
+const vista = () => {
+  $("resumen").textContent = $("caso").selectedOptions[0].textContent+" · "+$("tono").value+" · hasta "+$("dur").value+" min"+(elementos().length?" · orden aleatorio":"");
+  const el=elementos(), p=$("protocolo").value.trim();
+  $("prev").textContent = instrucciones(el.length ? {sorteo:el} : null);
+  $("aviso").textContent = p ? "Activo: se envía este texto íntegro, seguido de los datos adicionales y del orden sorteado. Los campos de rol, objetivo, tono, preguntas y contexto son orientativos." : "Vacío: las instrucciones se componen con los campos de arriba.";
+  if(p) $("dprot").open = true;
+};
+CAMPOS.forEach(f => $(f).addEventListener("input", vista));
+
+/* ===== v2f: asistente de configuración, informe, CSV y ejemplo ===== */
+const GEN="https://generativelanguage.googleapis.com/v1beta/models/";
+async function llamaTexto(modelo, clave, prompt, schema){
+  const r=await fetch(GEN+encodeURIComponent(modelo)+":generateContent",{method:"POST",credentials:"omit",cache:"no-store",
+    headers:{"Content-Type":"application/json","x-goog-api-key":clave},
+    body:JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.3,responseMimeType:"application/json",responseSchema:schema}})});
+  if(!r.ok) throw new Error("Google respondió HTTP "+r.status+". Revise la clave y el nombre del modelo de texto.");
+  const j=await r.json(), t=j?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+  if(!t) throw new Error("Respuesta vacía del modelo.");
+  return JSON.parse(t.replace(/^```json\s*|```\s*$/g,""));
+}
+const opts = id => [...$(id).options].map(o=>o.value||o.textContent);
+$("genCfg").onclick = async () => {
+  const m=$("msgAsist"), clave=$("clave").value.trim(), d=$("descNeg").value.trim();
+  if(!d){ m.textContent="Escriba primero la descripción."; return; }
+  if(!clave){ m.textContent="Pegue la clave en el campo «Clave API de Gemini» de la sala."; return; }
+  $("genCfg").disabled=true; m.textContent="Generando…";
+  try{
+    const S={type:"OBJECT",required:["rol","objetivo","tono","idioma","dur","saludo","guia","ctx","datos"],properties:{
+      rol:{type:"STRING"},objetivo:{type:"STRING"},tono:{type:"STRING",enum:opts("tono")},idioma:{type:"STRING",enum:opts("idioma")},dur:{type:"STRING",enum:opts("dur")},
+      saludo:{type:"STRING"},guia:{type:"ARRAY",items:{type:"STRING"}},ctx:{type:"STRING"},datos:{type:"STRING"}}};
+    const prompt="Eres consultor de conversaciones comerciales. A partir de la descripción de un negocio, diseña la configuración de un asistente conversacional por voz.\n"+
+      "Reglas: escribe en español; usa SOLO hechos que figuren en la descripción; no inventes precios, horarios, políticas ni cifras. En «datos» incluye los hechos aportados, uno por línea, y para cada dato imprescindible que falte escribe una línea «[COMPLETAR: …]». "+
+      "«rol» es una frase corta; «objetivo» una frase; «saludo» es la primera indicación al asistente; «guia» son de 3 a 6 preguntas u objetivos breves; «ctx» describe la empresa en una o dos frases.\n\nDESCRIPCIÓN:\n"+d;
+    const c=await llamaTexto($("mTexto").value.trim(),clave,prompt,S);
+    ["rol","objetivo","tono","idioma","dur","saludo","ctx","datos"].forEach(f=>{ if(c[f]!==undefined) $(f).value=c[f]; });
+    $("guia").value=(c.guia||[]).join("\n");
+    ["aleat","cierre","faltas","dudosas","protocolo"].forEach(f=>$(f).value="");
+    CASOS.propio=CASOS.propio||{n:"Configuración propia (generada)"}; if(![...$("caso").options].some(o=>o.value==="propio")) $("caso").add(new Option(CASOS.propio.n,"propio")); $("caso").value="propio";
+    vista();
+    const pend=($("datos").value.match(/\[COMPLETAR/g)||[]).length;
+    m.textContent="Configuración generada. Revise cada campo"+(pend?"; faltan "+pend+" dato(s) marcados como [COMPLETAR].":".");
+  }catch(e){ m.textContent="No se pudo generar: "+e.message; }
+  $("genCfg").disabled=false;
+};
+
+const csvCelda = v => '"'+String(v).replace(/"/g,'""').replace(/\r?\n/g," ")+'"';
+function csvTranscripcion(){
+  const f=["tiempo;hablante;texto"].concat(trozos.map(x=>[mmss(x.t),x.quien==="IA"?"Asistente":"Persona",csvCelda(x.texto.trim())].join(";")));
+  return "\ufeff"+f.join("\r\n")+"\r\n";
+}
+$("csv").onclick=()=>descarga("transcripcion.csv",csvTranscripcion(),"text/csv;charset=utf-8");
+
+let ultimoInforme=null;
+const TXT_TRANS = () => trozos.map(x=>"["+mmss(x.t)+"] "+(x.quien==="IA"?"Asistente":"Persona")+": "+x.texto.trim()).join("\n");
+$("genInf").onclick = async () => {
+  const m=$("msgInf"), clave=$("claveInf").value.trim();
+  if(!trozos.length){ m.textContent="No hay conversación."; return; }
+  if(!clave){ m.textContent="Pegue la clave de Gemini."; return; }
+  $("genInf").disabled=true; m.textContent="Generando el informe…";
+  try{
+    const S={type:"OBJECT",required:["resumen","hallazgos","citas","valoraciones","alertas","seguimiento"],properties:{
+      resumen:{type:"STRING"},
+      hallazgos:{type:"ARRAY",items:{type:"OBJECT",required:["tema","detalle"],properties:{tema:{type:"STRING"},detalle:{type:"STRING"}}}},
+      citas:{type:"ARRAY",items:{type:"STRING"}},
+      valoraciones:{type:"ARRAY",items:{type:"OBJECT",required:["elemento","valor","motivo"],properties:{elemento:{type:"STRING"},valor:{type:"STRING"},motivo:{type:"STRING"}}}},
+      alertas:{type:"ARRAY",items:{type:"STRING"}},seguimiento:{type:"STRING"}}};
+    const dud=dudReg.map(x=>"["+mmss(x.t)+"] "+x.et+": "+x.r).join("\n")||"(ninguna marcada)";
+    const falt=faltasReg.join("\n")||"(ninguno)";
+    const prompt="Eres analista de investigación. Redacta en español un informe breve y objetivo de la conversación siguiente entre un asistente y una persona. "+
+      "No inventes nada que no figure en la transcripción. «citas» debe contener fragmentos LITERALES de la persona (copiados sin cambios). "+
+      "«valoraciones» recoge puntuaciones o preferencias expresadas (elemento, valor, motivo); si no hay, devuelve una lista vacía. "+
+      "«alertas» recoge contradicciones, respuestas inverosímiles, bromas o temas ajenos que el investigador debería revisar, incluidas las marcadas por la página. «seguimiento» propone en una frase qué revisar o preguntar después.\n\n"+
+      "RESPUESTAS MARCADAS COMO DUDOSAS POR LA PÁGINA:\n"+dud+"\n\nDATOS QUE LA PERSONA ECHÓ EN FALTA:\n"+falt+"\n\nTRANSCRIPCIÓN:\n"+TXT_TRANS();
+    const r=await llamaTexto($("mTexto").value.trim(),clave,prompt,S);
+    const personas=norm(trozos.filter(x=>x.quien!=="IA").map(x=>x.texto).join(" "));
+    r.citas=(r.citas||[]).map(c=>({t:c,lit:norm(c).length>0&&personas.includes(norm(c))}));
+    ultimoInforme=r; pintaInforme(); $("descInf").disabled=false; m.textContent="Informe generado.";
+  }catch(e){ m.textContent="No se pudo generar: "+e.message; }
+  $("genInf").disabled=false;
+};
+function pintaInforme(){
+  const r=ultimoInforme, o=$("infOut"); o.textContent="";
+  const h=t=>{const e=document.createElement("h3");e.textContent=t;o.append(e)};
+  const p=(t,c)=>{const e=document.createElement("p");e.textContent=t;if(c)e.className=c;o.append(e);return e};
+  h("Resumen"); p(r.resumen);
+  if(r.hallazgos?.length){ h("Hallazgos"); r.hallazgos.forEach(x=>{const e=document.createElement("p");const b=document.createElement("b");b.textContent=x.tema+". ";e.append(b,x.detalle);o.append(e)}); }
+  if(r.citas?.length){ h("Citas literales"); r.citas.forEach(c=>{const q=document.createElement("blockquote");q.textContent="«"+c.t+"»";if(!c.lit){const s=document.createElement("div");s.className="nolit";s.textContent="No coincide literalmente con la transcripción; verifíquela.";q.append(s)}o.append(q)}); }
+  if(r.valoraciones?.length){ h("Valoraciones"); const t=document.createElement("table"); t.innerHTML="<thead><tr><th>Elemento</th><th>Valor</th><th>Motivo</th></tr></thead>"; const tb=document.createElement("tbody");
+    r.valoraciones.forEach(v=>{const tr=document.createElement("tr");[v.elemento,v.valor,v.motivo].forEach(x=>{const td=document.createElement("td");td.textContent=x;tr.append(td)});tb.append(tr)}); t.append(tb); o.append(t); }
+  h("Alertas para el investigador"); if(r.alertas?.length){ const u=document.createElement("ul"); r.alertas.forEach(a=>{const li=document.createElement("li");li.textContent=a;u.append(li)}); o.append(u);} else p("Ninguna.");
+  h("Seguimiento sugerido"); p(r.seguimiento);
+}
+$("descInf").onclick=()=>{ const r=ultimoInforme; if(!r) return;
+  const L=["INFORME DE LA ENTREVISTA (generado automáticamente; revisar antes de usar)","","RESUMEN",r.resumen,"","HALLAZGOS"].concat((r.hallazgos||[]).map(x=>"- "+x.tema+": "+x.detalle),["","CITAS LITERALES"],(r.citas||[]).map(c=>"- «"+c.t+"»"+(c.lit?"":" [no coincide literalmente]")),["","VALORACIONES"],(r.valoraciones||[]).map(v=>"- "+v.elemento+": "+v.valor+" ("+v.motivo+")"),["","ALERTAS PARA EL INVESTIGADOR"],(r.alertas||[]).map(a=>"- "+a),["","SEGUIMIENTO SUGERIDO",r.seguimiento,""]);
+  descarga("informe-entrevista.txt",L.join("\n"),"text/plain;charset=utf-8"); };
+
+/* conversación de ejemplo (escrita a mano; no es salida de ningún modelo) */
+const EJEMPLO=[["IA","Buenos días. Voy a hacerle unas preguntas sobre cómo compra yogures; serán unos cinco minutos, no hay respuestas correctas y sus datos serán anónimos, solo para un trabajo académico. ¿Me da su consentimiento para continuar?"],["Tú","Sí, claro."],["IA","Gracias. ¿Con qué frecuencia compra yogures: nunca, rara vez, a veces o a menudo?"],["Tú","Compro ocho al día, siete días a la semana."],["IA","¿Ocho al día? Quiero asegurarme de haberle entendido bien; cuénteme un poco cómo es eso."],["Tú","Es una exageración. En casa somos cinco y entre todos nos tomamos unos ocho al día."],["IA","Ah, ya, entre los cinco de casa. Le voy a describir un producto. Yogur natural de leche de pastoreo local, elaborado de forma artesanal y con un sabor tradicional y cremoso. Procede de pequeñas granjas de la región y se vende en un tarro de cristal retornable. Precio: 3,20 € el pack de 4. Si lo viera en la estantería, ¿qué haría?"],["Tú","Lo compraría por el tarro, aunque para cinco personas el precio se nos va."],["IA","Ya veo, lo del gasto en casa. Si tuviera que ponerle un número del 1 al 5, donde 1 es «seguro que no lo compraría» y 5 es «seguro que lo compraría», ¿cuál sería?"],["Tú","Un cuatro."],["IA","Un 4, de acuerdo. ¿Quiere añadir algo antes de terminar?"],["Tú","No, nada más."],["IA","Pues muchas gracias por su tiempo. Que tenga un buen día."]];
+$("demo").onclick=()=>{
+  if(activo) return;
+  $("caso").value="yogur"; cargaCaso("yogur");
+  trozos=[]; faltasReg=[]; dudReg=[]; registrados=new Set(); t0=performance.now()-1000; ultimoInforme=null; $("infOut").textContent="";
+  EJEMPLO.forEach((x,i)=>{ const u=trozos[trozos.length-1]; anota(x[0],x[1]); trozos[trozos.length-1].t=i*6; });
+  estado("Conversación de ejemplo cargada (escrita a mano, no generada por IA).");
+};
+
+cargaCaso("atencion");
+alternar(false);
+
+// Archivos de texto locales: se leen en el navegador y se añaden a «Datos adicionales»
+$("cargar").onclick = () => $("fich").click();
+$("fich").onchange = async e => {
+  for(const f of e.target.files) $("datos").value += (($("datos").value ? "\n\n":"") + "[" + f.name + "]\n" + await f.text());
+  e.target.value = ""; vista();
+};
+// Guardar y abrir la configuración (JSON sin claves)
+const descarga = (nombre, texto, tipo) => { const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([texto],{type:tipo})); a.download=nombre; a.click(); };
+$("gcfg").onclick = () => { const o={caso:$("caso").value}; CAMPOS.forEach(f=>o[f]=$(f).value); descarga("configuracion-entrevista.json",JSON.stringify(o,null,2),"application/json"); };
+$("lcfg").onclick = () => $("fcfg").click();
+$("fcfg").onchange = async e => { try{ const o=JSON.parse(await e.target.files[0].text()); CAMPOS.forEach(f=>{ if(o[f]!==undefined) $(f).value=o[f]; }); if(o.caso && CASOS[o.caso]) $("caso").value=o.caso; vista(); }catch{ estado("El archivo de configuración no es válido."); } e.target.value=""; };
+
+// ───────── Conexión con Gemini Live ─────────
+let dudReg=[], faltasReg=[], registrados=new Set(), cerrando=false, textoTurno="", ordenAsignado=null, ws, ctxIn, ctxOut, stream, nodo, siguiente=0, fuentes=[], trozos=[], activo=false, t0=0, reloj, tope;
+const estado = (t, vivo) => { $("txtEstado").textContent=t; $("punto").className = vivo ? "on" : ""; };
+const WORKLET = `registerProcessor('cap', class extends AudioWorkletProcessor {
+  process(i){ const c=i[0][0]; if(c){ const p=new Int16Array(c.length);
+    for(let k=0;k<c.length;k++){ const s=Math.max(-1,Math.min(1,c[k])); p[k]=s<0?s*32768:s*32767; }
+    this.port.postMessage(p.buffer,[p.buffer]); } return true; } });`;
+const b64 = buf => { let s=""; const u=new Uint8Array(buf); for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode(...u.subarray(i,i+0x8000)); return btoa(s); };
+const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/,"Z");
+const norm = t => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+const mmss = s => String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+
+async function token(clave, min){
+  const ahora = Date.now();
+  const r = await fetch("https://generativelanguage.googleapis.com/v1beta/auth_tokens",{method:"POST",credentials:"omit",cache:"no-store",
+    headers:{"Content-Type":"application/json","x-goog-api-key":clave},
+    body:JSON.stringify({uses:1,newSessionExpireTime:iso(ahora+120000),expireTime:iso(ahora+(min+2)*60000)})});
+  if(!r.ok) throw new Error("Google no emitió el token (HTTP "+r.status+"). Revise la clave y el acceso a Gemini Live.");
+  return (await r.json()).name;
+}
+function anota(quien, texto){
+  const u = trozos[trozos.length-1];
+  if(u && u.quien===quien) u.texto += texto; else trozos.push({quien,texto,t:Math.round((performance.now()-t0)/1000)});
+  $("log").textContent = "";
+  for(const x of trozos){ const d=document.createElement("p"); d.className="t "+(x.quien==="IA"?"ia":""); const b=document.createElement("b"); b.textContent=(x.quien==="IA"?"Asistente":"Persona")+" · "+mmss(x.t); d.append(b,x.texto); $("log").append(d); }
+  const fr=$("faltas").value.trim();
+  if(quien==="IA" && fr){ const i=trozos.length-1; if(!registrados.has(i) && norm(trozos[i].texto).includes(norm(fr))){
+    registrados.add(i); const j=trozos.slice(0,i).map(x=>x.quien).lastIndexOf("Tú");
+    faltasReg.push(j>=0 ? trozos[j].texto.trim() : "(sin pregunta previa)"); pintaFaltas(); } }
+  if(quien==="IA"){ const i=trozos.length-1, nt=norm(trozos[i].texto);
+    $("dudosas").value.split("\n").map(l=>l.split("|")).forEach(([fr,et],k)=>{ fr=(fr||"").trim(); if(!fr) return;
+      const clave="d"+i+"_"+k; if(registrados.has(clave) || !nt.includes(norm(fr))) return; registrados.add(clave);
+      const j=trozos.slice(0,i).map(x=>x.quien).lastIndexOf("Tú");
+      dudReg.push({t:j>=0?trozos[j].t:trozos[i].t, et:(et||"Dudosa").trim(), r:j>=0?trozos[j].texto.trim():"(sin respuesta previa)"}); pintaFaltas(); }); }
+  $("log").scrollTop = $("log").scrollHeight; $("desc").disabled = false; $("csv").disabled = false; $("informe").hidden = false;
+}
+function pintaFaltas(){
+  const el=$("falt"); el.textContent="";
+  if(faltasReg.length){ const b=document.createElement("b"); b.textContent="Datos que la persona echó en falta (detección automática)"; el.append(b);
+    faltasReg.forEach(t=>{ const d=document.createElement("div"); d.textContent="· "+t; el.append(d); }); }
+  if(dudReg.length){ const b=document.createElement("b"); b.className="dud"; b.textContent="Respuestas dudosas o incoherentes (detección automática; el investigador decide)"; el.append(b);
+    dudReg.forEach(x=>{ const d=document.createElement("div"); d.className="dud"; d.textContent="· ["+mmss(x.t)+"] "+x.et+": «"+x.r+"»"; el.append(d); }); }
+}
+function reproduce(datos){
+  const bin=atob(datos), n=bin.length>>1, v=new DataView(new ArrayBuffer(n*2));
+  for(let i=0;i<n*2;i++) v.setUint8(i,bin.charCodeAt(i));
+  const buf=ctxOut.createBuffer(1,n,24000), ch=buf.getChannelData(0);
+  for(let i=0;i<n;i++) ch[i]=v.getInt16(i*2,true)/32768;
+  const s=ctxOut.createBufferSource(); s.buffer=buf; s.connect(ctxOut.destination);
+  const cuando=Math.max(ctxOut.currentTime+0.03,siguiente); siguiente=cuando+buf.duration;
+  fuentes.push(s); s.onended=()=>fuentes=fuentes.filter(x=>x!==s); s.start(cuando);
+}
+const callar = () => { fuentes.forEach(s=>{try{s.stop()}catch{}}); fuentes=[]; siguiente=0; };
+
+async function iniciar(){
+  const clave=$("clave").value.trim();
+  if(!clave){ estado("Introduzca su clave de Gemini."); return; }
+  $("ini").disabled=true; trozos=[]; $("log").innerHTML='<p class="vacio">Conectando…</p>'; estado("Conectando…");
+  try{
+    ctxOut=new AudioContext({sampleRate:24000}); ctxIn=new AudioContext({sampleRate:16000});
+    stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
+    await ctxIn.audioWorklet.addModule("data:application/javascript;base64,"+btoa(WORKLET));
+    const min=parseInt($("dur").value,10), tk=await token(clave,min);
+    ordenAsignado = elementos().length ? barajar(elementos()) : null;
+    faltasReg=[]; dudReg=[]; registrados=new Set(); cerrando=false; textoTurno=""; pintaFaltas();
+    $("clave").value="";
+    ws=new WebSocket("wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token="+encodeURIComponent(tk));
+    ws.onopen=()=>ws.send(JSON.stringify({setup:{model:"models/"+$("modelo").value.trim(),
+      generationConfig:{responseModalities:["AUDIO"],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:$("voz").value}}}},
+      systemInstruction:{parts:[{text:instrucciones(ordenAsignado)}]},inputAudioTranscription:{},outputAudioTranscription:{}}}));
+    ws.onmessage=async ev=>{
+      const m=JSON.parse(typeof ev.data==="string"?ev.data:await ev.data.text());
+      if(m.setupComplete) empezar(min);
+      const c=m.serverContent; if(!c) return;
+      if(c.interrupted) callar();
+      if(c.inputTranscription?.text) anota("Tú",c.inputTranscription.text);
+      if(c.outputTranscription?.text){ anota("IA",c.outputTranscription.text); textoTurno+=c.outputTranscription.text;
+        const ci=$("cierre").value.trim(); if(ci && !cerrando && norm(textoTurno).includes(norm(ci))) cerrando=true; }
+      if(c.turnComplete){ textoTurno=""; if(cerrando && activo){ activo=false; const resto=Math.max(0,(siguiente-ctxOut.currentTime))*1000; setTimeout(()=>parar("Entrevista finalizada tras la despedida."),resto+1200); } }
+      for(const p of c.modelTurn?.parts||[]) if(p.inlineData?.mimeType?.startsWith("audio/pcm")) reproduce(p.inlineData.data);
+    };
+    ws.onerror=()=>estado("Error de conexión con Google.");
+    ws.onclose=()=>parar("Sesión cerrada.");
+  }catch(e){ parar(e.name==="NotAllowedError"?"Permita el acceso al micrófono.":e.message); }
+}
+function empezar(min){
+  activo=true; t0=performance.now(); estado("En directo. Hable con normalidad.",true); $("fin").disabled=false; $("log").textContent="";
+  reloj=setInterval(()=>$("reloj").textContent=mmss(Math.round((performance.now()-t0)/1000)),500);
+  tope=setTimeout(()=>parar("Se alcanzó la duración configurada."),min*60000);
+  nodo=new AudioWorkletNode(ctxIn,"cap"); ctxIn.createMediaStreamSource(stream).connect(nodo);
+  nodo.port.onmessage=e=>{ if(activo&&!cerrando&&ws.readyState===1&&ws.bufferedAmount<64000) ws.send(JSON.stringify({realtimeInput:{audio:{mimeType:"audio/pcm;rate=16000",data:b64(e.data)}}})); };
+  const s=$("saludo").value.trim(); if(s) ws.send(JSON.stringify({realtimeInput:{text:s}}));
+}
+function parar(msg){
+  activo=false; callar(); clearInterval(reloj); clearTimeout(tope);
+  if(ws){ ws.onclose=null; try{ws.close()}catch{} }
+  stream&&stream.getTracks().forEach(t=>t.stop());
+  ctxIn&&ctxIn.close().catch(()=>{}); ctxOut&&ctxOut.close().catch(()=>{});
+  $("ini").disabled=false; $("fin").disabled=true; estado(msg||"En espera.");
+}
+$("ini").onclick=iniciar; $("fin").onclick=()=>parar("Entrevista finalizada.");
+$("desc").onclick=()=>descarga("transcripcion.txt",(ordenAsignado ? "Orden asignado: "+ordenAsignado.join(" → ")+"\n\n" : "")+trozos.map(x=>"["+mmss(x.t)+"] "+(x.quien==="IA"?"Asistente":"Persona")+": "+x.texto).join("\n\n")+"\n"+($("faltas").value.trim() ? "\nDATOS QUE LA PERSONA ECHÓ EN FALTA (detección automática; revisar):\n"+(faltasReg.length ? faltasReg.map(t=>"- "+t).join("\n") : "- ninguno detectado")+"\n" : "")+($("dudosas").value.trim() ? "\nRESPUESTAS DUDOSAS O INCOHERENTES (detección automática; el investigador decide su exclusión):\n"+(dudReg.length ? dudReg.map(x=>"- ["+mmss(x.t)+"] "+x.et+": "+x.r).join("\n") : "- ninguna detectada")+"\n" : ""),"text/plain;charset=utf-8");
+</script>
+</body>
+</html>
