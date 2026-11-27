@@ -345,7 +345,7 @@ function crea(o){
   const I=root.InformeSwiss;
   if(!document.getElementById("kw-css")){const s=document.createElement("style");s.id="kw-css";s.textContent=CSS;document.head.appendChild(s)}
   const cache=new Map(), timers=new Map(), enCurso=new Set();
-  const M={activo:true,error:"",cache};
+  const M={activo:true,error:"",cache,modelo:"gemini-2.5-flash-lite"};
   const lim=t=>String(t).toLowerCase();
   function valida(texto,lista){
     const L=lim(texto),vistos=[],out=[];
@@ -365,7 +365,7 @@ function crea(o){
      "Devuelve entre 0 y 3 expresiones de 1 a 4 palabras, copiadas LITERALMENTE del texto, que sean clave para ese motivo. No marques relleno, saludos ni palabras genéricas; si nada es relevante, devuelve una lista vacía. "+
      "tipo «foco»: tema, motivación, objeción o emoción que conviene profundizar. tipo «dato»: cifra, nombre, plazo, importe o decisión concreta. "+
      "«codigo»: etiqueta de 2 a 5 letras mayúsculas que resume el tema (por ejemplo PRE, PLAZ, CONF).\n\nTEXTO DE LA PERSONA:\n"+texto;
-    const r=await I.llamaTexto(o.obtenModelo()||"gemini-flash-latest",clave,prompt,SCHEMA);
+    const r=await I.llamaTexto(M.modelo,clave,prompt,SCHEMA);
     return valida(texto,r.datos&&r.datos.claves);
   }
   const est=m=>{ M.estado=m; if(o.alEstado) o.alEstado(m); };
@@ -379,7 +379,8 @@ function crea(o){
       timers.delete(id);
       if(cache.has(texto)||enCurso.has(texto)) return; enCurso.add(texto); est("Analizando…");
       try{ cache.set(texto,await analiza(texto)||[]); est("Activo."); if(o.alCambiar) o.alCambiar(); }
-      catch(e){ M.bloqueo=Date.now()+15000; est("Error: "+e.message+" Se reintentará en 15 s."); }
+      catch(e){ const dia=/per ?day|PerDay|daily/i.test(e.message); M.bloqueo=Date.now()+(dia?1800000:15000);
+        est(dia?"Cupo diario de Gemini agotado: las palabras clave se pausan 30 min (el resto sigue funcionando).":"Error: "+e.message+" Se reintentará en 15 s."); }
       finally{ enCurso.delete(texto); }
     },1000);
     timers.set(id,{texto,h});
