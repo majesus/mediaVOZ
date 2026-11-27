@@ -74,6 +74,10 @@ python -m http.server 8000
 
 y entra en **http://localhost:8000/piloto-empresas.html**.
 
+### Alternativa: usarla directamente en la web
+
+Si el repositorio tiene activado **GitHub Pages** (Settings → Pages → *Deploy from a branch* → `main` / raíz), la aplicación está disponible en **https://majesus.github.io/mediaVOZ/** y no hay que descargar nada. Funciona por HTTPS, de modo que el micrófono no da problemas. Cada persona pega su propia clave en Configuración; la web no incluye ninguna.
+
 ### 4 · Configura y habla
 
 **Configuración ⚙** → pega tu clave → elige un caso → **Iniciar experiencia** → concede el micrófono. Cada panel propone frases para probar.
