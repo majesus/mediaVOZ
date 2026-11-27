@@ -44,6 +44,15 @@ Lo que sí debes saber: tu voz (y la imagen de la cámara, si la activas) se env
 
 ---
 
+## Novedades
+
+- **Informe de la conversación en `.md` y `.html`** (diseño suizo clásico: IBM Plex Sans, un solo acento rojo, modo oscuro automático, imprimible a PDF). En Live Lab, el botón **Informe (.md / .html)** junto a *Descargar TXT* abre un cuadro para elegir el modelo de texto y generarlo; incluye resumen, hallazgos, citas comprobadas contra la transcripción, datos y decisiones, alertas, seguimiento y la transcripción como anexo.
+- **Palabras clave en directo.** Mientras habla la persona, se marcan con color las expresiones relacionadas con el motivo de la experiencia (PRE precio, CONF confianza, CANT cantidad, PLAZ plazo…). Una petición de texto por intervención terminada, con `gemini-2.5-flash-lite` por defecto (desplegable para cambiarlo) y con un interruptor para desactivarlas.
+- **Modelos por defecto.** Conversación: `gemini-2.5-flash-native-audio-preview-12-2025`. Texto (informe, configuración asistida): `gemini-2.5-flash`. Si Google responde 503, 429 o 500, la página prueba automáticamente otros modelos de texto.
+- **Entrevistador de voz** (`entrevistador-voz/`): módulo independiente con configuración asistida, protocolo con criterio, informe en `.md` y `.html`, CSV y palabras clave. Material del seminario en `seminario/` (presentación y guion).
+
+---
+
 ## Puesta en marcha en tres minutos
 
 ### 1 · Consigue tu clave gratuita de Google AI Studio
@@ -61,7 +70,7 @@ Mientras el proyecto **no tenga facturación activada**, trabajas en el **nivel 
 git clone https://github.com/majesus/mediaVOZ.git
 ```
 
-O bien **Code → Download ZIP** y descomprímelo. Mantén los cuatro archivos `piloto-*` en la misma carpeta.
+O bien **Code → Download ZIP** y descomprímelo. Mantén todos los archivos de la carpeta raíz (`.html`, `.css` y `.js`) juntos.
 
 ### 3 · Ábrela
 
@@ -110,10 +119,17 @@ Si el repositorio tiene activado **GitHub Pages** (Settings → Pages → *Deplo
 
 ```
 mediaVOZ/
+├── index.html             Interfaz (copia de piloto-empresas.html, para GitHub Pages)
 ├── piloto-empresas.html   Interfaz
 ├── piloto-empresas.css    Estilo
 ├── piloto-casos.js        Casos, datos ficticios, funciones y base de operaciones
 ├── piloto-empresas.js     Sesión de voz con la Gemini Live API
+├── informe-swiss.js       Informe en Markdown y HTML (diseño suizo) y llamada a Gemini de texto
+├── informe-live.js        Botón y cuadro del informe en Live Lab
+├── claves.js              Palabras clave en directo (marcador y etiqueta)
+├── claves-live.js         Integración de las palabras clave en Live Lab
+├── entrevistador-voz/     Entrevistador de voz (una sola página) y su documentación
+├── seminario/             Presentación y guion del seminario
 ├── PROMPT_LIVE_LAB.md     Prompt maestro para reconstruirla con un asistente de código
 └── README.md
 ```
@@ -131,6 +147,7 @@ mediaVOZ/
 |---|---|
 | «No se pudo obtener token temporal» | Clave mal copiada, cuota agotada o modelo no disponible para tu cuenta |
 | No se oye nada / no te escucha | Permiso de micrófono del navegador; usa `localhost` en lugar de abrir el archivo |
+| «HTTP 503» o «HTTP 429» al generar texto | Modelo saturado o cupo diario agotado: la página prueba otros modelos; si todos fallan, espera o activa la facturación |
 | La sesión se corta | Límite de nueve minutos por demostración, red inestable o cuota |
 | Responde a ruidos | Configuración → Interrupciones → *Con filtro* y sensibilidad *Baja* |
 
