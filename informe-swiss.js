@@ -143,6 +143,14 @@ async function llamaTexto(modelo,clave,prompt,schema){
   const envia=m=>fetch(GEN+"/"+encodeURIComponent(m)+":generateContent",{method:"POST",credentials:"omit",cache:"no-store",headers:{"Content-Type":"application/json","x-goog-api-key":clave},body:cuerpo});
   let usado=modelo,r=await envia(modelo);
   if(r.status===404){const alt=await modeloDisponible(clave);if(!alt||alt===modelo) throw new Error(await errGoogle(r));usado=alt;r=await envia(alt);}
+  /* Saturación (503), límite (429) o error del servidor (500): se prueban otros modelos de texto */
+  if([429,500,503].includes(r.status)){
+    const e0=await errGoogle(r);
+    for(const alt of ["gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash","gemini-flash-lite-latest"].filter(m=>m!==modelo&&m!==usado)){
+      const r2=await envia(alt); if(r2.ok){usado=alt;r=r2;break;} if(![404,429,500,503].includes(r2.status)){r=r2;usado=alt;break;}
+    }
+    if(!r.ok&&[429,500,503].includes(r.status)) throw new Error(e0);
+  }
   if(!r.ok) throw new Error(await errGoogle(r));
   const j=await r.json(),t=(j&&j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts||[]).map(p=>p.text||"").join("");
   if(!t) throw new Error("Respuesta vacía del modelo.");
