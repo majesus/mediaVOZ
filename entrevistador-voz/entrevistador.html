@@ -3,67 +3,67 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Asistente de voz · versión editable</title>
+<title>Live Lab · Entrevistador de voz</title>
 <style>
-  :root{--bg:#f4f1ea;--ink:#1d2b2f;--mut:#5d6b6e;--acc:#2f5d62;--line:#d9d3c4;--card:#fbf9f4}
+  :root{--bg:#fff;--ink:#171717;--mut:#666;--acc:#c91820;--line:#d6d6d6;--card:#fff;--panel:#f5f5f3}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
-  header{padding:.9rem 2rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:1rem}
-  header b{font:600 1.15rem Georgia,serif}header .sub{color:var(--mut);font-size:.85rem;margin-left:.8rem}
-  #btnCfg{display:inline-flex;align-items:center;gap:.5rem;background:var(--acc);color:#fff;font-size:.9rem}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  header{height:72px;padding:0 4vw;border-bottom:1px solid var(--ink);display:flex;justify-content:space-between;align-items:center;gap:1rem}
+  .brand strong{display:block;font-size:21px;letter-spacing:-.055em;line-height:1;font-weight:750}.brand small{display:block;letter-spacing:.1em;font-size:9px;margin-top:3px;color:var(--mut)}
+  #btnCfg{display:inline-flex;align-items:center;gap:.5rem}
   #btnCfg svg{width:1.05rem;height:1.05rem;transition:transform .3s}
-  #btnCfg[aria-expanded="true"]{background:none;color:var(--acc);border:1px solid var(--acc)}
+  #btnCfg[aria-expanded="true"]{background:#fff;color:var(--ink)}
   #btnCfg[aria-expanded="true"] svg{transform:rotate(90deg)}
-  :focus-visible{outline:3px solid #e0a82e;outline-offset:2px}
-  main{display:flex;align-items:flex-start;padding:1.5rem 2rem}
-  section{background:var(--card);border:1px solid var(--line)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+  main{display:flex;align-items:flex-start;padding:1.8rem 4vw;max-width:1600px;margin:auto}
+  section{background:#fff;border:0;border-top:2px solid var(--ink)}
   #sala{flex:1;min-width:0;padding:1.2rem 1.3rem}
   #sala .in{max-width:1000px;margin:0 auto}
   #resumen{color:var(--mut);font-size:.85rem;margin:0 0 .4rem}
   #config{flex:0 0 auto;width:0;margin-left:0;border-width:0;overflow:hidden;opacity:0;max-height:calc(100vh - 7rem);transition:width .3s ease,margin .3s ease,opacity .25s ease}
   #config .cfg-in{width:min(540px,45vw);padding:1.2rem 1.3rem}
-  main.abierto #config{width:min(540px,45vw);margin-left:1.5rem;border-width:1px;opacity:1;overflow-y:auto}
+  main.abierto #config{width:min(540px,45vw);margin-left:2rem;border-width:2px 0 0;opacity:1;overflow-y:auto}
   #log{height:calc(100vh - 23rem);min-height:300px}
   main:not(.abierto) #log{font-size:1.12rem}
   @media(prefers-reduced-motion:reduce){#config,#btnCfg svg{transition:none}}
-  @media(max-width:860px){main{flex-direction:column;padding:1rem}main.abierto #config{width:100%;margin:1rem 0 0}#config .cfg-in{width:100%}header .sub{display:none}}
-  h2{font:600 .72rem system-ui;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);margin:0 0 .8rem}
+  @media(max-width:860px){main{flex-direction:column;padding:1rem}main.abierto #config{width:100%;margin:1rem 0 0}#config .cfg-in{width:100%}.brand small{display:none}}
+  h2{font:700 10px Helvetica,Arial,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:var(--acc);margin:0 0 .8rem}
   label{display:block;margin:.75rem 0 .2rem;font-weight:600;font-size:.85rem}
   label small{font-weight:400;color:var(--mut)}
-  input,select,textarea{width:100%;font:inherit;padding:.5rem .6rem;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid #aaa;border-radius:0;background:#fff;color:var(--ink)}
   textarea{resize:vertical}
   .fila{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem}
-  button{font:600 .85rem system-ui;background:var(--acc);color:#fff;border:0;padding:.6rem 1.1rem;cursor:pointer}
-  button.sec{background:none;color:var(--acc);border:1px solid var(--acc)}
-  button:disabled{opacity:.4;cursor:default}
+  button{font:600 14px Helvetica,Arial,sans-serif;background:var(--ink);color:#fff;border:1px solid var(--ink);border-radius:0;padding:10px 15px;cursor:pointer}button:hover:not(:disabled){background:var(--acc);border-color:var(--acc)}
+  button.sec{background:#fff;color:var(--ink);border:1px solid var(--ink)}button.sec:hover:not(:disabled){background:#eee;border-color:var(--ink)}
+  button:disabled{opacity:.32;cursor:default}
   .acciones{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
   #estado{display:flex;align-items:center;gap:.5rem;color:var(--mut);font-size:.9rem;margin-bottom:.6rem}
-  #punto{width:.7rem;height:.7rem;border-radius:50%;background:#b9b3a3}
-  #punto.on{background:#2e9e6b;box-shadow:0 0 0 4px rgba(46,158,107,.2)}
-  #log{border-top:1px solid var(--line);margin-top:1rem;padding-top:.8rem;overflow:auto}
+  #punto{width:7px;height:7px;border-radius:50%;background:#b5b5b5}
+  #punto.on{background:var(--acc);box-shadow:0 0 0 4px rgba(201,24,32,.18)}
+  #log{border-top:1px solid var(--ink);margin-top:1rem;padding-top:.8rem;overflow:auto}
   .t{margin:0 0 .7rem}.t b{display:block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
   .t.ia b{color:var(--acc)}
   .small{font-size:.8rem;color:var(--mut);margin:.4rem 0}
   .vacio{color:var(--mut);font-style:italic}
   details{margin-top:.8rem}summary{cursor:pointer;color:var(--acc);font-size:.85rem}
-  pre{white-space:pre-wrap;font-size:.78rem;background:#fff;border:1px solid var(--line);padding:.7rem;max-height:200px;overflow:auto}
+  pre{white-space:pre-wrap;font-size:.78rem;background:var(--panel);border:1px solid var(--line);padding:.7rem;max-height:200px;overflow:auto}
 #falt .dud{display:block;margin-top:.7rem}
 
-.asist{border:1px solid var(--line,#d9d4c7);background:#fff;padding:.9rem 1rem;margin:.2rem 0 1rem}
+.asist{border:1px solid var(--line);border-top:2px solid var(--ink);background:var(--panel);padding:.9rem 1rem;margin:.2rem 0 1rem}
 .asist textarea{min-height:5.5rem}
 .asist .fila2{display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;margin-top:.6rem}
 .asist .fila2 div{flex:1 1 12rem}
 #msgAsist,#msgInf{margin:.5rem 0 0;font-size:.9rem;min-height:1.2em}
-#informe{margin-top:1.2rem;border-top:1px solid var(--line,#d9d4c7);padding-top:1rem}
+#informe{margin-top:1.2rem;border-top:2px solid var(--ink);padding-top:1rem}
 #informe h3{font-size:1.02rem;margin:1rem 0 .3rem}
 #informe .aviso{font-size:.86rem;color:#626262}
-#informe blockquote{margin:.25rem 0;padding-left:.8rem;border-left:3px solid #9bb3b3}
+#informe blockquote{margin:.25rem 0;padding-left:.8rem;border-left:3px solid var(--acc)}
 #informe .nolit{color:#8a5a00;font-size:.82rem}
-#informe table{border-collapse:collapse;width:100%;font-size:.93rem}#informe td,#informe th{border-bottom:1px solid #e3dfd2;padding:.3rem .4rem;text-align:left;vertical-align:top}
+#informe table{border-collapse:collapse;width:100%;font-size:.93rem}#informe td,#informe th{border-bottom:1px solid var(--line);padding:.3rem .4rem;text-align:left;vertical-align:top}
 </style>
 </head>
 <body>
-<header><div><b>Asistente de voz</b><span class="sub">Todo se ejecuta en su navegador</span></div>
+<header><div class="brand"><strong>LIVE LAB</strong><small>ENTREVISTADOR DE VOZ · TODO SE EJECUTA EN SU NAVEGADOR</small></div>
 <button id="btnCfg" type="button" aria-expanded="false" aria-controls="config"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span>Configurar</span></button></header>
 <main>
 <section id="sala"><div class="in">
