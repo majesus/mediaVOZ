@@ -138,21 +138,35 @@ async function modeloDisponible(clave){
   const pref=["gemini-flash-latest","gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash"];
   return pref.find(n=>buenos.includes(n))||buenos.find(n=>/flash/i.test(n)&&!/lite/i.test(n))||buenos.find(n=>/flash/i.test(n))||buenos[0]||null;
 }
-async function llamaTexto(modelo,clave,prompt,schema){
+/* Llamada a Gemini (texto) con tiempo de espera, recuperación ante 404 y otros modelos ante saturación o silencio.
+   opc: {porPeticion: ms máximos por intento (40000), total: ms máximos en conjunto (90000)} */
+async function llamaTexto(modelo,clave,prompt,schema,opc){
+  opc=opc||{};
+  const porPeticion=opc.porPeticion||40000,total=opc.total||90000,fin=Date.now()+total;
+  const tope=m=>{const e=new Error(m);e.timeout=true;return e};
   const cuerpo=JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.3,responseMimeType:"application/json",responseSchema:schema}});
-  const envia=m=>fetch(GEN+"/"+encodeURIComponent(m)+":generateContent",{method:"POST",credentials:"omit",cache:"no-store",headers:{"Content-Type":"application/json","x-goog-api-key":clave},body:cuerpo});
-  let usado=modelo,r=await envia(modelo);
-  if(r.status===404){const alt=await modeloDisponible(clave);if(!alt||alt===modelo) throw new Error(await errGoogle(r));usado=alt;r=await envia(alt);}
-  /* Saturación (503), límite (429) o error del servidor (500): se prueban otros modelos de texto */
-  if([429,500,503].includes(r.status)){
-    const e0=await errGoogle(r);
+  const envia=async m=>{
+    const resta=fin-Date.now(); if(resta<1500) throw tope("Tiempo de espera agotado: Gemini no respondió en "+Math.round(total/1000)+" s.");
+    const ms=Math.min(porPeticion,resta),ac=new AbortController(),h=setTimeout(()=>ac.abort(),ms);
+    try{return await fetch(GEN+"/"+encodeURIComponent(m)+":generateContent",{method:"POST",credentials:"omit",cache:"no-store",signal:ac.signal,headers:{"Content-Type":"application/json","x-goog-api-key":clave},body:cuerpo})}
+    catch(e){if(e&&e.name==="AbortError") throw tope("El modelo "+m+" no respondió en "+Math.round(ms/1000)+" s."); throw e}
+    finally{clearTimeout(h)}
+  };
+  let usado=modelo,r=null,e0="";
+  try{r=await envia(modelo)}catch(e){if(!e.timeout) throw e; e0=e.message}
+  if(r&&r.status===404){const alt=await modeloDisponible(clave);if(!alt||alt===modelo) throw new Error(await errGoogle(r));usado=alt;r=await envia(alt);}
+  /* Saturación (503), límite (429), error del servidor (500) o silencio del modelo: se prueban otros modelos de texto mientras quede tiempo */
+  if(!r||[429,500,503].includes(r.status)){
+    if(r) e0=await errGoogle(r);
     for(const alt of ["gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash","gemini-flash-lite-latest"].filter(m=>m!==modelo&&m!==usado)){
-      const r2=await envia(alt); if(r2.ok){usado=alt;r=r2;break;} if(![404,429,500,503].includes(r2.status)){r=r2;usado=alt;break;}
+      if(fin-Date.now()<3000) break;
+      try{const r2=await envia(alt); if(r2.ok||![404,429,500,503].includes(r2.status)){usado=alt;r=r2;break}}catch(e){if(!e.timeout) throw e}
     }
-    if(!r.ok&&[429,500,503].includes(r.status)) throw new Error(e0);
+    if(!r||[429,500,503].includes(r.status)) throw new Error(e0||"Gemini no está disponible en este momento.");
   }
   if(!r.ok) throw new Error(await errGoogle(r));
-  const j=await r.json(),t=(j&&j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts||[]).map(p=>p.text||"").join("");
+  const espera=Math.max(2000,fin-Date.now()),j=await Promise.race([r.json(),new Promise((_,no)=>setTimeout(()=>no(tope("Gemini dejó de responder a mitad de la respuesta.")),espera))]),
+    t=(j&&j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts||[]).map(p=>p.text||"").join("");
   if(!t) throw new Error("Respuesta vacía del modelo.");
   return {datos:JSON.parse(t.replace(/^```json\s*|```\s*$/g,"")),modelo:usado};
 }

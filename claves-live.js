@@ -8,7 +8,8 @@ const C=Claves.crea({
   obtenModelo:()=>($("repModel")&&$("repModel").value)||"gemini-flash-latest",
   obtenContexto:()=>{const c=CASES[chosen];return c.brand+" — "+c.title+". "+c.desc},
   alCambiar:()=>render(),
-  alEstado:m=>{const e=$("kwEst");if(e)e.textContent=m}
+  alEstado:(m,err)=>{const e=$("kwEst");if(!e) return;e.textContent=m;e.className=err?"err":"";e.setAttribute("role","status");
+    if(err){const b=document.createElement("button");b.type="button";b.textContent="Reintentar";b.onclick=()=>C.reintenta();e.append(" ",b)}}
 });
 const orig=render;
 render=function(){
@@ -21,7 +22,7 @@ render=function(){
 const row=document.querySelector(".exportrow"), lab=document.createElement("label");
 lab.className="kw-ctl"; lab.innerHTML='<input type="checkbox" id="kwChk" checked> Palabras clave en directo <select id="kwMod" aria-label="Modelo de las palabras clave"><option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (el más barato)</option><option value="gemini-2.5-flash">gemini-2.5-flash</option><option value="gemini-flash-latest">gemini-flash-latest</option><option value="gemini-2.0-flash">gemini-2.0-flash</option></select> <small id="kwEst"></small>';
 (row||$("log").parentNode).appendChild(lab);
-$("kwMod").onchange=e=>{C.modelo=e.target.value;C.bloqueo=0};
+$("kwMod").onchange=e=>{C.modelo=e.target.value;C.reintenta()};
 $("kwChk").onchange=e=>{C.activo=e.target.checked;render()};
 render();
 })();

@@ -5,7 +5,7 @@
 const CSS=".kw{color:#14110F;padding:3px 0;border-radius:8px;-webkit-box-decoration-break:clone;box-decoration-break:clone;padding-left:5px;padding-right:5px;font-weight:400}"+
 ".kw{background:#FFEA00}"+
 ".kw-bd{display:inline-block;font:500 10px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:2px 4px;margin:0 6px 0 2px;vertical-align:super;color:#14110F;letter-spacing:.02em;border-radius:4px;text-transform:uppercase}"+
-".kw-ctl{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;margin:0 0 .5rem}.kw-ctl input{width:16px;height:16px}.kw-ctl small{opacity:.7}";
+".kw-ctl{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;margin:0 0 .5rem}.kw-ctl input{width:16px;height:16px}.kw-ctl small{opacity:.7}.kw-ctl small.err{opacity:1;color:#b00020;font-weight:600}.kw-ctl small button{margin-left:6px;padding:2px 8px;font-size:11px}";
 const COD={PRE:["Precio","#FFE066"],CONF:["Confianza","#8FD3FF"],CANT:["Cantidad","#FFB38A"],PROD:["Producto","#B7F55C"],PLAZ:["Plazo o tiempo","#C9B6FF"],MARC:["Marca","#FF9EC4"],CALI:["Calidad","#7EE6C8"],NEC:["Necesidad","#FFC857"],OBJ:["Objeción o duda","#FF8A80"],EMO:["Emoción","#E3A8FF"],DISP:["Disponibilidad","#9FB8FF"],PAGO:["Pago o financiación","#E6D3A3"],USO:["Uso o contexto","#A5E8A0"],OTRO:["Otro","#D9D9D9"]};
 const SCHEMA={type:"OBJECT",required:["claves"],properties:{claves:{type:"ARRAY",items:{type:"OBJECT",required:["frase","codigo","tipo"],properties:{frase:{type:"STRING"},codigo:{type:"STRING",enum:Object.keys(COD)},tipo:{type:"STRING",enum:["foco","dato"]}}}}}};
 function crea(o){
@@ -25,6 +25,14 @@ function crea(o){
     }
     return out.sort((a,b)=>a.s-b.s).slice(0,3);
   }
+  const fallos=new Map();
+  const conTope=(p,ms)=>Promise.race([p,new Promise((_,no)=>setTimeout(()=>no(Object.assign(new Error("Tiempo de espera agotado ("+Math.round(ms/1000)+" s)."),{timeout:true})),ms))]);
+  const est=(m,err)=>{ M.estado=m; if(o.alEstado) o.alEstado(m,!!err); };
+  function refresca(){
+    if(enCurso.size) return est("Analizando"+(enCurso.size>1?" ("+enCurso.size+")":"")+"…");
+    if(M.error) return est(M.error,true);
+    est("Activo.");
+  }
   async function analiza(texto){
     const clave=o.obtenClave(); if(!clave||!I) return;
     const prompt="Marcas palabras clave en tiempo real de lo que dice una persona durante una conversación, para que quien entrevista sepa en qué centrarse.\n\n"+
@@ -32,26 +40,37 @@ function crea(o){
      "Devuelve entre 0 y 3 expresiones de 1 a 4 palabras, copiadas LITERALMENTE del texto, que sean clave para ese motivo. No marques relleno, saludos ni palabras genéricas; si nada es relevante, devuelve una lista vacía. "+
      "tipo «foco»: tema, motivación, objeción o emoción que conviene profundizar. tipo «dato»: cifra, nombre, plazo, importe o decisión concreta. "+
      "«codigo»: elige el que mejor encaje de esta lista: "+Object.entries(COD).map(([k,v])=>k+" ("+v[0]+")").join(", ")+".\n\nTEXTO DE LA PERSONA:\n"+texto;
-    const r=await I.llamaTexto(M.modelo,clave,prompt,SCHEMA);
+    /* Tiempo de espera: 10 s por intento y 24 s en total; si el modelo elegido no responde, llamaTexto prueba otros. */
+    const r=await conTope(I.llamaTexto(M.modelo,clave,prompt,SCHEMA,{porPeticion:10000,total:24000}),30000);
     return valida(texto,r.datos&&r.datos.claves);
   }
-  const est=m=>{ M.estado=m; if(o.alEstado) o.alEstado(m); };
+  const ESPERAS=[4000,12000,25000];
+  async function ejecuta(texto,id){
+    if(cache.has(texto)||enCurso.has(texto)) return;
+    enCurso.add(texto); refresca();
+    try{
+      cache.set(texto,await analiza(texto)||[]); fallos.delete(texto); M.error="";
+      if(o.alCambiar) o.alCambiar();
+    }catch(e){
+      const n=(fallos.get(texto)||0)+1; fallos.set(texto,n);
+      const dia=/per ?day|PerDay|daily/i.test(e.message||"");
+      if(dia){ M.bloqueo=Date.now()+1800000; M.error="Cupo diario de Gemini agotado: las palabras clave se pausan 30 min (el resto sigue funcionando)."; }
+      else if(n<=ESPERAS.length){
+        const w=ESPERAS[n-1]; M.error="Palabras clave: "+(e.message||"error")+" Reintento "+n+"/"+ESPERAS.length+" en "+Math.round(w/1000)+" s.";
+        const h=setTimeout(()=>{ timers.delete(id); ejecuta(texto,id); },w); timers.set(id,{texto,h});
+      }else M.error="Palabras clave: no se pudo analizar tras "+ESPERAS.length+" reintentos ("+(e.message||"error")+").";
+    }finally{ enCurso.delete(texto); refresca(); }
+  }
   function pide(texto,id){
     if(!M.activo||texto.trim().length<12||cache.has(texto)||enCurso.has(texto)) return;
     if(!o.obtenClave()){ est("Sin clave de Gemini: introdúzcala para marcar palabras clave."); return; }
-    if(Date.now()<(M.bloqueo||0)) return;
+    if(Date.now()<(M.bloqueo||0)||(fallos.get(texto)||0)>ESPERAS.length) return;
     const previo=timers.get(id); if(previo&&previo.texto===texto) return;
     if(previo) clearTimeout(previo.h);
-    const h=setTimeout(async()=>{
-      timers.delete(id);
-      if(cache.has(texto)||enCurso.has(texto)) return; enCurso.add(texto); est("Analizando…");
-      try{ cache.set(texto,await analiza(texto)||[]); est("Activo."); if(o.alCambiar) o.alCambiar(); }
-      catch(e){ const dia=/per ?day|PerDay|daily/i.test(e.message); M.bloqueo=Date.now()+(dia?1800000:15000);
-        est(dia?"Cupo diario de Gemini agotado: las palabras clave se pausan 30 min (el resto sigue funcionando).":"Error: "+e.message+" Se reintentará en 15 s."); }
-      finally{ enCurso.delete(texto); }
-    },300);
-    timers.set(id,{texto,h});
+    timers.set(id,{texto,h:setTimeout(()=>{ timers.delete(id); ejecuta(texto,id); },300)});
   }
+  /* Reintento manual: borra fallos y bloqueos y vuelve a analizar lo pendiente. */
+  M.reintenta=()=>{ fallos.clear(); M.bloqueo=0; M.error=""; timers.forEach(x=>clearTimeout(x.h)); timers.clear(); refresca(); if(o.alCambiar) o.alCambiar(); };
   M.nodo=(texto,id,cerrada)=>{
     const t=String(texto), f=document.createElement("span"), ms=M.activo?cache.get(t):null;
     if(M.activo&&!ms&&cerrada!==false) pide(t,id);
@@ -66,7 +85,7 @@ function crea(o){
     if(p<t.length) f.append(t.slice(p));
     return f;
   };
-  M.reinicia=()=>{cache.clear();timers.forEach(x=>clearTimeout(x.h));timers.clear();enCurso.clear()};
+  M.reinicia=()=>{fallos.clear();cache.clear();timers.forEach(x=>clearTimeout(x.h));timers.clear();enCurso.clear()};
   return M;
 }
 root.Claves={crea};

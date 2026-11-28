@@ -109,6 +109,15 @@
     <div><label for="idioma">Idioma</label><select id="idioma"><option>español de España</option><option>español latinoamericano</option><option>inglés</option><option>francés</option><option>portugués</option></select></div>
     <div><label for="dur">Duración (min)</label><select id="dur"><option>3</option><option>5</option><option selected>8</option><option>10</option><option>15</option></select></div>
   </div>
+  <div class="fila">
+    <div><label for="sil1">Si la persona no responde, preguntar si sigue ahí tras</label><select id="sil1"><option value="0">No esperar (desactivado)</option><option value="8">8 s</option><option value="12">12 s</option><option value="15" selected>15 s</option><option value="20">20 s</option><option value="30">30 s</option><option value="45">45 s</option><option value="60">60 s</option></select></div>
+    <div><label for="sil2">Si sigue sin responder, despedirse y cerrar tras otros</label><select id="sil2"><option value="8">8 s</option><option value="10">10 s</option><option value="15" selected>15 s</option><option value="20">20 s</option><option value="30">30 s</option><option value="45">45 s</option></select></div>
+  </div>
+  <div class="fila">
+    <div><label for="ruido">Entorno sonoro <small>(filtro de ruido ambiente)</small></label><select id="ruido"><option value="off">Filtro desactivado</option><option value="quiet">Silencioso</option><option value="normal" selected>Normal</option><option value="loud">Ruidoso (murmullo, sala con gente)</option></select></div>
+    <div><label for="pausa">Pausa que da por terminado mi turno</label><select id="pausa"><option value="600">0,6 s</option><option value="900" selected>0,9 s</option><option value="1200">1,2 s</option><option value="1800">1,8 s</option></select></div>
+    <div><label for="maxturno">Duración máxima de un turno de voz</label><select id="maxturno"><option value="20">20 s</option><option value="40" selected>40 s</option><option value="60">60 s</option><option value="120">120 s</option></select></div>
+  </div>
   <label for="saludo">Primera indicación al asistente <small>(para que inicie la conversación; vacío = espera a que hable la persona)</small></label>
   <input id="saludo">
   <label for="guia">Preguntas guía <small>(una por línea; el asistente las plantea una a una)</small></label>
@@ -287,21 +296,35 @@ async function modeloDisponible(clave){
   const pref=["gemini-flash-latest","gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash"];
   return pref.find(n=>buenos.includes(n))||buenos.find(n=>/flash/i.test(n)&&!/lite/i.test(n))||buenos.find(n=>/flash/i.test(n))||buenos[0]||null;
 }
-async function llamaTexto(modelo,clave,prompt,schema){
+/* Llamada a Gemini (texto) con tiempo de espera, recuperación ante 404 y otros modelos ante saturación o silencio.
+   opc: {porPeticion: ms máximos por intento (40000), total: ms máximos en conjunto (90000)} */
+async function llamaTexto(modelo,clave,prompt,schema,opc){
+  opc=opc||{};
+  const porPeticion=opc.porPeticion||40000,total=opc.total||90000,fin=Date.now()+total;
+  const tope=m=>{const e=new Error(m);e.timeout=true;return e};
   const cuerpo=JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.3,responseMimeType:"application/json",responseSchema:schema}});
-  const envia=m=>fetch(GEN+"/"+encodeURIComponent(m)+":generateContent",{method:"POST",credentials:"omit",cache:"no-store",headers:{"Content-Type":"application/json","x-goog-api-key":clave},body:cuerpo});
-  let usado=modelo,r=await envia(modelo);
-  if(r.status===404){const alt=await modeloDisponible(clave);if(!alt||alt===modelo) throw new Error(await errGoogle(r));usado=alt;r=await envia(alt);}
-  /* Saturación (503), límite (429) o error del servidor (500): se prueban otros modelos de texto */
-  if([429,500,503].includes(r.status)){
-    const e0=await errGoogle(r);
+  const envia=async m=>{
+    const resta=fin-Date.now(); if(resta<1500) throw tope("Tiempo de espera agotado: Gemini no respondió en "+Math.round(total/1000)+" s.");
+    const ms=Math.min(porPeticion,resta),ac=new AbortController(),h=setTimeout(()=>ac.abort(),ms);
+    try{return await fetch(GEN+"/"+encodeURIComponent(m)+":generateContent",{method:"POST",credentials:"omit",cache:"no-store",signal:ac.signal,headers:{"Content-Type":"application/json","x-goog-api-key":clave},body:cuerpo})}
+    catch(e){if(e&&e.name==="AbortError") throw tope("El modelo "+m+" no respondió en "+Math.round(ms/1000)+" s."); throw e}
+    finally{clearTimeout(h)}
+  };
+  let usado=modelo,r=null,e0="";
+  try{r=await envia(modelo)}catch(e){if(!e.timeout) throw e; e0=e.message}
+  if(r&&r.status===404){const alt=await modeloDisponible(clave);if(!alt||alt===modelo) throw new Error(await errGoogle(r));usado=alt;r=await envia(alt);}
+  /* Saturación (503), límite (429), error del servidor (500) o silencio del modelo: se prueban otros modelos de texto mientras quede tiempo */
+  if(!r||[429,500,503].includes(r.status)){
+    if(r) e0=await errGoogle(r);
     for(const alt of ["gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash","gemini-flash-lite-latest"].filter(m=>m!==modelo&&m!==usado)){
-      const r2=await envia(alt); if(r2.ok){usado=alt;r=r2;break;} if(![404,429,500,503].includes(r2.status)){r=r2;usado=alt;break;}
+      if(fin-Date.now()<3000) break;
+      try{const r2=await envia(alt); if(r2.ok||![404,429,500,503].includes(r2.status)){usado=alt;r=r2;break}}catch(e){if(!e.timeout) throw e}
     }
-    if(!r.ok&&[429,500,503].includes(r.status)) throw new Error(e0);
+    if(!r||[429,500,503].includes(r.status)) throw new Error(e0||"Gemini no está disponible en este momento.");
   }
   if(!r.ok) throw new Error(await errGoogle(r));
-  const j=await r.json(),t=(j&&j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts||[]).map(p=>p.text||"").join("");
+  const espera=Math.max(2000,fin-Date.now()),j=await Promise.race([r.json(),new Promise((_,no)=>setTimeout(()=>no(tope("Gemini dejó de responder a mitad de la respuesta.")),espera))]),
+    t=(j&&j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts||[]).map(p=>p.text||"").join("");
   if(!t) throw new Error("Respuesta vacía del modelo.");
   return {datos:JSON.parse(t.replace(/^```json\s*|```\s*$/g,"")),modelo:usado};
 }
@@ -338,7 +361,7 @@ root.InformeSwiss={construyeMd,construyeHtml,descarga,pideInforme,llamaTexto,slu
 const CSS=".kw{color:#14110F;padding:3px 0;border-radius:8px;-webkit-box-decoration-break:clone;box-decoration-break:clone;padding-left:5px;padding-right:5px;font-weight:400}"+
 ".kw{background:#FFEA00}"+
 ".kw-bd{display:inline-block;font:500 10px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:2px 4px;margin:0 6px 0 2px;vertical-align:super;color:#14110F;letter-spacing:.02em;border-radius:4px;text-transform:uppercase}"+
-".kw-ctl{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;margin:0 0 .5rem}.kw-ctl input{width:16px;height:16px}.kw-ctl small{opacity:.7}";
+".kw-ctl{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;margin:0 0 .5rem}.kw-ctl input{width:16px;height:16px}.kw-ctl small{opacity:.7}.kw-ctl small.err{opacity:1;color:#b00020;font-weight:600}.kw-ctl small button{margin-left:6px;padding:2px 8px;font-size:11px}";
 const COD={PRE:["Precio","#FFE066"],CONF:["Confianza","#8FD3FF"],CANT:["Cantidad","#FFB38A"],PROD:["Producto","#B7F55C"],PLAZ:["Plazo o tiempo","#C9B6FF"],MARC:["Marca","#FF9EC4"],CALI:["Calidad","#7EE6C8"],NEC:["Necesidad","#FFC857"],OBJ:["Objeción o duda","#FF8A80"],EMO:["Emoción","#E3A8FF"],DISP:["Disponibilidad","#9FB8FF"],PAGO:["Pago o financiación","#E6D3A3"],USO:["Uso o contexto","#A5E8A0"],OTRO:["Otro","#D9D9D9"]};
 const SCHEMA={type:"OBJECT",required:["claves"],properties:{claves:{type:"ARRAY",items:{type:"OBJECT",required:["frase","codigo","tipo"],properties:{frase:{type:"STRING"},codigo:{type:"STRING",enum:Object.keys(COD)},tipo:{type:"STRING",enum:["foco","dato"]}}}}}};
 function crea(o){
@@ -358,6 +381,14 @@ function crea(o){
     }
     return out.sort((a,b)=>a.s-b.s).slice(0,3);
   }
+  const fallos=new Map();
+  const conTope=(p,ms)=>Promise.race([p,new Promise((_,no)=>setTimeout(()=>no(Object.assign(new Error("Tiempo de espera agotado ("+Math.round(ms/1000)+" s)."),{timeout:true})),ms))]);
+  const est=(m,err)=>{ M.estado=m; if(o.alEstado) o.alEstado(m,!!err); };
+  function refresca(){
+    if(enCurso.size) return est("Analizando"+(enCurso.size>1?" ("+enCurso.size+")":"")+"…");
+    if(M.error) return est(M.error,true);
+    est("Activo.");
+  }
   async function analiza(texto){
     const clave=o.obtenClave(); if(!clave||!I) return;
     const prompt="Marcas palabras clave en tiempo real de lo que dice una persona durante una conversación, para que quien entrevista sepa en qué centrarse.\n\n"+
@@ -365,26 +396,37 @@ function crea(o){
      "Devuelve entre 0 y 3 expresiones de 1 a 4 palabras, copiadas LITERALMENTE del texto, que sean clave para ese motivo. No marques relleno, saludos ni palabras genéricas; si nada es relevante, devuelve una lista vacía. "+
      "tipo «foco»: tema, motivación, objeción o emoción que conviene profundizar. tipo «dato»: cifra, nombre, plazo, importe o decisión concreta. "+
      "«codigo»: elige el que mejor encaje de esta lista: "+Object.entries(COD).map(([k,v])=>k+" ("+v[0]+")").join(", ")+".\n\nTEXTO DE LA PERSONA:\n"+texto;
-    const r=await I.llamaTexto(M.modelo,clave,prompt,SCHEMA);
+    /* Tiempo de espera: 10 s por intento y 24 s en total; si el modelo elegido no responde, llamaTexto prueba otros. */
+    const r=await conTope(I.llamaTexto(M.modelo,clave,prompt,SCHEMA,{porPeticion:10000,total:24000}),30000);
     return valida(texto,r.datos&&r.datos.claves);
   }
-  const est=m=>{ M.estado=m; if(o.alEstado) o.alEstado(m); };
+  const ESPERAS=[4000,12000,25000];
+  async function ejecuta(texto,id){
+    if(cache.has(texto)||enCurso.has(texto)) return;
+    enCurso.add(texto); refresca();
+    try{
+      cache.set(texto,await analiza(texto)||[]); fallos.delete(texto); M.error="";
+      if(o.alCambiar) o.alCambiar();
+    }catch(e){
+      const n=(fallos.get(texto)||0)+1; fallos.set(texto,n);
+      const dia=/per ?day|PerDay|daily/i.test(e.message||"");
+      if(dia){ M.bloqueo=Date.now()+1800000; M.error="Cupo diario de Gemini agotado: las palabras clave se pausan 30 min (el resto sigue funcionando)."; }
+      else if(n<=ESPERAS.length){
+        const w=ESPERAS[n-1]; M.error="Palabras clave: "+(e.message||"error")+" Reintento "+n+"/"+ESPERAS.length+" en "+Math.round(w/1000)+" s.";
+        const h=setTimeout(()=>{ timers.delete(id); ejecuta(texto,id); },w); timers.set(id,{texto,h});
+      }else M.error="Palabras clave: no se pudo analizar tras "+ESPERAS.length+" reintentos ("+(e.message||"error")+").";
+    }finally{ enCurso.delete(texto); refresca(); }
+  }
   function pide(texto,id){
     if(!M.activo||texto.trim().length<12||cache.has(texto)||enCurso.has(texto)) return;
     if(!o.obtenClave()){ est("Sin clave de Gemini: introdúzcala para marcar palabras clave."); return; }
-    if(Date.now()<(M.bloqueo||0)) return;
+    if(Date.now()<(M.bloqueo||0)||(fallos.get(texto)||0)>ESPERAS.length) return;
     const previo=timers.get(id); if(previo&&previo.texto===texto) return;
     if(previo) clearTimeout(previo.h);
-    const h=setTimeout(async()=>{
-      timers.delete(id);
-      if(cache.has(texto)||enCurso.has(texto)) return; enCurso.add(texto); est("Analizando…");
-      try{ cache.set(texto,await analiza(texto)||[]); est("Activo."); if(o.alCambiar) o.alCambiar(); }
-      catch(e){ const dia=/per ?day|PerDay|daily/i.test(e.message); M.bloqueo=Date.now()+(dia?1800000:15000);
-        est(dia?"Cupo diario de Gemini agotado: las palabras clave se pausan 30 min (el resto sigue funcionando).":"Error: "+e.message+" Se reintentará en 15 s."); }
-      finally{ enCurso.delete(texto); }
-    },300);
-    timers.set(id,{texto,h});
+    timers.set(id,{texto,h:setTimeout(()=>{ timers.delete(id); ejecuta(texto,id); },300)});
   }
+  /* Reintento manual: borra fallos y bloqueos y vuelve a analizar lo pendiente. */
+  M.reintenta=()=>{ fallos.clear(); M.bloqueo=0; M.error=""; timers.forEach(x=>clearTimeout(x.h)); timers.clear(); refresca(); if(o.alCambiar) o.alCambiar(); };
   M.nodo=(texto,id,cerrada)=>{
     const t=String(texto), f=document.createElement("span"), ms=M.activo?cache.get(t):null;
     if(M.activo&&!ms&&cerrada!==false) pide(t,id);
@@ -399,12 +441,90 @@ function crea(o){
     if(p<t.length) f.append(t.slice(p));
     return f;
   };
-  M.reinicia=()=>{cache.clear();timers.forEach(x=>clearTimeout(x.h));timers.clear();enCurso.clear()};
+  M.reinicia=()=>{fallos.clear();cache.clear();timers.forEach(x=>clearTimeout(x.h));timers.clear();enCurso.clear()};
   return M;
 }
 root.Claves={crea};
 })(typeof window!=="undefined"?window:globalThis);
 
+</script>
+<script>
+/* ---- Puerta de ruido; copia de puerta.js ---- */
+/* Puerta de ruido (noise gate adaptativa) para el micrófono: PCM 16 bits, 16 kHz, mono.
+   Solo deja pasar el audio cuando hay voz por encima del ruido de fondo; el resto se sustituye por silencio digital,
+   de modo que el detector de fin de turno de Gemini ve silencio real y no espera indefinidamente.
+   - suelo de ruido adaptativo (baja rápido, sube despacio) y umbral = máx(umbralMin, suelo × 2,5);
+   - apertura con 90 ms de voz (180 ms mientras habla el asistente, para no reinterpretar su propio eco);
+   - cierre tras `hang` ms sin voz; audio previo (240 ms) para no perder la primera sílaba;
+   - turno máximo: si la puerta lleva abierta más de `maxTurno` ms se considera ruido continuo, se absorbe en el suelo y se cierra. */
+(function(root){
+"use strict";
+const NIVEL={quiet:0.010,normal:0.015,loud:0.030};
+function crea(o){
+  o=o||{};
+  const M={floor:0.008,abierta:false,cuenta:0,hasta:0,desde:0,previo:[],bloqueada:false,calma:0,forzados:0,
+    umbralMin:NIVEL[o.nivel]||NIVEL.normal,hang:o.hang||500,maxTurno:o.maxTurno||40000,pre:8};
+  const rms=b=>{const v=new Int16Array(b);let q=0;for(let i=0;i<v.length;i++){const d=v[i]/32768;q+=d*d}return Math.sqrt(q/Math.max(1,v.length))};
+  const sil=b=>new ArrayBuffer(b.byteLength);
+  M.proceso=(buf,agente)=>{
+    const t=performance.now(),r=rms(buf),d=buf.byteLength/32,thr=Math.max(M.umbralMin,M.floor*2.5)*(agente?1.5:1),voz=r>thr;
+    if(!M.abierta){
+      if(!agente) M.floor=r<M.floor?M.floor*0.8+r*0.2:M.floor*0.995+r*0.005;
+      if(M.bloqueada){ if(voz) M.calma=0; else{ M.calma+=d; if(M.calma>=500){M.bloqueada=false;M.calma=0} } return [sil(buf)]; }
+      M.previo.push(buf); while(M.previo.length>M.pre) M.previo.shift();
+      M.cuenta=voz?M.cuenta+d:0;
+      if(M.cuenta>=(agente?180:90)){ M.abierta=true; M.desde=t; M.hasta=t+M.hang; M.cuenta=0; const out=M.previo; M.previo=[]; return out; }
+      return [sil(buf)];
+    }
+    if(voz) M.hasta=t+M.hang;
+    if(t-M.desde>M.maxTurno){ M.abierta=false; M.bloqueada=true; M.calma=0; M.floor=Math.max(M.floor,r*0.9); M.previo=[]; M.forzados++; if(o.alForzar) o.alForzar(); return [sil(buf)]; }
+    if(t>M.hasta){ M.abierta=false; M.previo=[]; return [sil(buf)]; }
+    return [buf];
+  };
+  return M;
+}
+root.Puerta={crea,NIVEL};
+})(typeof window!=="undefined"?window:globalThis);
+</script>
+<script>
+/* ---- Silencio del interlocutor; copia de silencio.js ---- */
+/* Silencio del interlocutor: si la persona no responde, el asistente espera unos segundos, pregunta si sigue ahí
+   (o reformula) y, si continúa el silencio, se despide con cortesía y cierra la conversación.
+   Uso: const S=Silencio.crea({espera1,espera2,hablaAgente,activo,envia,alAviso,alCerrar}); S.voz() cada vez que la persona habla. */
+(function(root){
+"use strict";
+const AVISO1="[Aviso del sistema, no es la persona] La persona lleva unos segundos sin responder. Pregúntale con amabilidad si sigue ahí o reformula tu última pregunta de forma más sencilla. Una sola frase corta; no supongas lo que habría contestado.";
+const AVISO2="[Aviso del sistema, no es la persona] Sigue sin haber respuesta. Despídete con cortesía en una sola frase: di que cierras la conversación por ahora y que puede volver a empezarla cuando quiera. No hagas más preguntas.";
+function crea(o){
+  const M={etapa:0,ref:Date.now(),despedida:0,ultimoAudio:0,AVISO1,AVISO2};
+  const ya=()=>Date.now();
+  M.reinicia=()=>{M.etapa=0;M.ref=ya();M.despedida=0;M.ultimoAudio=0};
+  /* La persona ha hablado: se reinicia la cuenta (salvo que ya estemos despidiéndonos). */
+  M.voz=()=>{ if(M.despedida||M.etapa===3) return; M.etapa=0; M.ref=ya(); };
+  function tick(){
+    const t=ya();
+    if(!o.activo()){ M.ref=t; return; }
+    if(M.etapa===3) return;
+    if(o.hablaAgente()){ M.ultimoAudio=t; if(!M.despedida) M.ref=t; return; }
+    if(M.despedida){
+      /* Cierre cuando el asistente termina de despedirse (o, como tope, 15 s después del aviso). */
+      if((M.ultimoAudio>M.despedida&&t-M.ultimoAudio>1500)||t-M.despedida>15000){ M.etapa=3; o.alCerrar(); }
+      return;
+    }
+    if(t-M.ultimoAudio<1200){ M.ref=t; return; }
+    const e1=(Number(o.espera1())||0)*1000, e2=(Number(o.espera2())||0)*1000;
+    if(!e1) return;
+    const q=t-M.ref;
+    if(M.etapa===0&&q>=e1){ M.etapa=1; M.ref=t; o.envia(AVISO1); if(o.alAviso) o.alAviso(1); }
+    else if(M.etapa===1&&q>=(e2||e1)){ M.etapa=2; M.despedida=t; o.envia(AVISO2); if(o.alAviso) o.alAviso(2); }
+  }
+  M.h=setInterval(tick,200);
+  M.detiene=()=>clearInterval(M.h);
+  M.tick=tick;
+  return M;
+}
+root.Silencio={crea,AVISO1,AVISO2};
+})(typeof window!=="undefined"?window:globalThis);
 </script>
 <script>
 const CASOS = {
@@ -567,8 +687,9 @@ $("irInf").onclick=()=>{ const i=$("informe"); i.hidden=false; i.scrollIntoView(
 $("csv").onclick=()=>descarga("transcripcion.csv",csvTranscripcion(),"text/csv;charset=utf-8");
 
 const CLV=Claves.crea({obtenClave:()=>($("clave").value||$("claveInf").value).trim(),obtenModelo:()=>$("mTexto").value.trim(),
-  obtenContexto:()=>"ROL: "+$("rol").value+"\nOBJETIVO: "+$("objetivo").value+($("guia").value.trim()?"\nPREGUNTAS GUÍA:\n"+$("guia").value:""),alCambiar:()=>pintaLog(),alEstado:m=>{const x=$("kwEst");if(x)x.textContent=m}});
-{ const l=document.createElement("label"); l.className="kw-ctl"; l.innerHTML='<input type="checkbox" id="kwChk" checked> Palabras clave en directo <small></small> <select id="kwMod" aria-label="Modelo de las palabras clave"><option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (el más barato)</option><option value="gemini-2.5-flash">gemini-2.5-flash</option><option value="gemini-flash-latest">gemini-flash-latest</option><option value="gemini-2.0-flash">gemini-2.0-flash</option></select> <small id="kwEst"></small>'; $("log").before(l); $("kwMod").onchange=e=>{CLV.modelo=e.target.value;CLV.bloqueo=0}; $("kwChk").onchange=e=>{CLV.activo=e.target.checked;pintaLog()}; }
+  obtenContexto:()=>"ROL: "+$("rol").value+"\nOBJETIVO: "+$("objetivo").value+($("guia").value.trim()?"\nPREGUNTAS GUÍA:\n"+$("guia").value:""),alCambiar:()=>pintaLog(),alEstado:(m,err)=>{const x=$("kwEst");if(!x) return;x.textContent=m;x.className=err?"err":"";x.setAttribute("role","status");if(err){const b=document.createElement("button");b.type="button";b.textContent="Reintentar";b.onclick=()=>CLV.reintenta();x.append(" ",b)}}});
+{ const l=document.createElement("label"); l.className="kw-ctl"; l.innerHTML='<input type="checkbox" id="kwChk" checked> Palabras clave en directo <small></small> <select id="kwMod" aria-label="Modelo de las palabras clave"><option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (el más barato)</option><option value="gemini-2.5-flash">gemini-2.5-flash</option><option value="gemini-flash-latest">gemini-flash-latest</option><option value="gemini-2.0-flash">gemini-2.0-flash</option></select> <small id="kwEst"></small>'; $("log").before(l); $("kwMod").onchange=e=>{CLV.modelo=e.target.value;CLV.reintenta()}; $("kwChk").onchange=e=>{CLV.activo=e.target.checked;pintaLog()}; }
+let SIL=null, PU=null;
 let ultimoInforme=null;
 const TXT_TRANS = () => trozos.map(x=>"["+mmss(x.t)+"] "+(x.quien==="IA"?"Asistente":"Persona")+": "+x.texto.trim()).join("\n");
 $("genInf").onclick = async () => {
@@ -706,7 +827,7 @@ async function iniciar(){
   $("ini").disabled=true; trozos=[]; $("log").innerHTML='<p class="vacio">Conectando…</p>'; estado("Conectando…");
   try{
     ctxOut=new AudioContext({sampleRate:24000}); ctxIn=new AudioContext({sampleRate:16000});
-    stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
+    stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:false}});
     await ctxIn.audioWorklet.addModule("data:application/javascript;base64,"+btoa(WORKLET));
     const min=parseInt($("dur").value,10), tk=await token(clave,min);
     ordenAsignado = elementos().length ? barajar(elementos()) : null;
@@ -715,13 +836,14 @@ async function iniciar(){
     ws=new WebSocket("wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token="+encodeURIComponent(tk));
     ws.onopen=()=>ws.send(JSON.stringify({setup:{model:"models/"+$("modelo").value.trim(),
       generationConfig:{responseModalities:["AUDIO"],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:$("voz").value}}}},
-      systemInstruction:{parts:[{text:instrucciones(ordenAsignado)}]},inputAudioTranscription:{},outputAudioTranscription:{}}}));
+      systemInstruction:{parts:[{text:instrucciones(ordenAsignado)}]},inputAudioTranscription:{},outputAudioTranscription:{},
+      realtimeInputConfig:{automaticActivityDetection:{disabled:false,startOfSpeechSensitivity:"START_SENSITIVITY_LOW",endOfSpeechSensitivity:"END_SENSITIVITY_HIGH",prefixPaddingMs:120,silenceDurationMs:parseInt($("pausa").value,10)||900}}}}));
     ws.onmessage=async ev=>{
       const m=JSON.parse(typeof ev.data==="string"?ev.data:await ev.data.text());
       if(m.setupComplete) empezar(min);
       const c=m.serverContent; if(!c) return;
       if(c.interrupted) callar();
-      if(c.inputTranscription?.text) anota("Tú",c.inputTranscription.text);
+      if(c.inputTranscription?.text){ anota("Tú",c.inputTranscription.text); SIL&&SIL.voz(); }
       if(c.outputTranscription?.text){ anota("IA",c.outputTranscription.text); textoTurno+=c.outputTranscription.text;
         const ci=$("cierre").value.trim(); if(ci && !cerrando && norm(textoTurno).includes(norm(ci))) cerrando=true; }
       if(c.turnComplete){ textoTurno=""; if(cerrando && activo){ activo=false; const resto=Math.max(0,(siguiente-ctxOut.currentTime))*1000; setTimeout(()=>parar("Entrevista finalizada tras la despedida."),resto+1200); } }
@@ -736,10 +858,27 @@ function empezar(min){
   reloj=setInterval(()=>$("reloj").textContent=mmss(Math.round((performance.now()-t0)/1000)),500);
   tope=setTimeout(()=>parar("Se alcanzó la duración configurada."),min*60000);
   nodo=new AudioWorkletNode(ctxIn,"cap"); ctxIn.createMediaStreamSource(stream).connect(nodo);
-  nodo.port.onmessage=e=>{ if(activo&&!cerrando&&ws.readyState===1&&ws.bufferedAmount<64000) ws.send(JSON.stringify({realtimeInput:{audio:{mimeType:"audio/pcm;rate=16000",data:b64(e.data)}}})); };
+  let golpes=0; PU=$("ruido").value==="off"?null:Puerta.crea({nivel:$("ruido").value,maxTurno:(parseInt($("maxturno").value,10)||40)*1000,hang:500,alForzar:()=>estado("Ruido continuo detectado: se ha ignorado para no esperar indefinidamente.",true)});
+  nodo.port.onmessage=e=>{
+    const piezas=PU?PU.proceso(e.data,fuentes.length>0):[e.data];
+    if(SIL){
+      if(PU){ if(PU.abierta) SIL.voz(); }
+      else if(fuentes.length===0){ const v=new Int16Array(e.data); let q=0; for(let i=0;i<v.length;i++){ const d=v[i]/32768; q+=d*d; } const rms=Math.sqrt(q/Math.max(1,v.length)); golpes=rms>0.02?golpes+1:Math.max(0,golpes-0.25); if(golpes>=3){ golpes=0; SIL.voz(); } }
+    }
+    if(activo&&!cerrando&&ws.readyState===1&&ws.bufferedAmount<64000) for(const x of piezas) ws.send(JSON.stringify({realtimeInput:{audio:{mimeType:"audio/pcm;rate=16000",data:b64(x)}}}));
+  };
   const s=$("saludo").value.trim(); if(s) ws.send(JSON.stringify({realtimeInput:{text:s}}));
+  SIL=Silencio.crea({
+    espera1:()=>$("sil1").value, espera2:()=>$("sil2").value,
+    activo:()=>!!(activo&&ws&&ws.readyState===1&&(!cerrando||SIL.despedida)),
+    hablaAgente:()=>fuentes.length>0,
+    envia:t=>ws.send(JSON.stringify({realtimeInput:{text:t}})),
+    alAviso:e=>{ if(e===2) cerrando=true; estado(e===1?"La persona no responde: el asistente pregunta si sigue ahí.":"Silencio prolongado: el asistente se despide.",true); },
+    alCerrar:()=>parar("Entrevista finalizada por silencio prolongado.")
+  });
 }
 function parar(msg){
+  if(SIL){ SIL.detiene(); SIL=null; } PU=null;
   activo=false; callar(); clearInterval(reloj); clearTimeout(tope);
   if(ws){ ws.onclose=null; try{ws.close()}catch{} }
   stream&&stream.getTracks().forEach(t=>t.stop());
